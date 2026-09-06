@@ -17,6 +17,10 @@ FAST_TOOLS = frozenset({
     "show_workflows",
     "list_step_types",
     "get_step_schema",
+    # Resource-bound MCP App callbacks. They are intentionally small and
+    # authoritative so the embedded UI never invokes hidden legacy tools.
+    "get_node_settings_context",
+    "save_node_settings",
     "list_workflows",
     "get_workflow",
     "get_step_details",

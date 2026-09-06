@@ -12,14 +12,24 @@ from mcp.server.apps import Apps, ResourceCsp
 from mcp_types import CallToolResult, TextContent
 from pydantic import Field
 
-from mcp_server.jotform_client import JotformClient
-from mcp_server.models import WorkflowListUIResult, WorkflowPreviewUIResult
-from mcp_server.tools.reading import read_workflow_list, read_workflow_preview
+from mcp_server.jotform_client import JotformAPIError, JotformClient
+from mcp_server.models import (
+    NodeSettingsContextResult,
+    UpdateStepResult,
+    WorkflowListUIResult,
+    WorkflowPreviewUIResult,
+)
+from mcp_server.tools import building
+from mcp_server.tools.reading import (
+    form_fields_from_questions,
+    read_workflow_list,
+    read_workflow_preview,
+)
 
 # Bump this whenever the embedded MCP UI or its CSP contract changes. Clients
 # cache `ui://` resources by URI, so reusing a version can leave an older host
 # unable to load a newly configured settings runtime.
-WORKFLOW_UI_RESOURCE_VERSION = 53
+WORKFLOW_UI_RESOURCE_VERSION = 58
 WORKFLOW_UI_RESOURCE_URI = (
     f"ui://jotform/workflows/v{WORKFLOW_UI_RESOURCE_VERSION}.html"
 )
@@ -127,6 +137,64 @@ def create_workflow_apps(client: JotformClient, *, html: str | None = None) -> A
         "openai/outputTemplate": WORKFLOW_UI_RESOURCE_URI,
         "openai/widgetAccessible": True,
     }
+    widget_tool_meta = {
+        "openai/widgetAccessible": True,
+    }
+
+    @apps.tool(
+        resource_uri=WORKFLOW_UI_RESOURCE_URI,
+        title="Workflow node settings context",
+        meta=widget_tool_meta,
+    )
+    async def get_node_settings_context(
+        workflow_id: Annotated[str, Field(description="Workflow ID containing the selected node.")],
+        step_id: Annotated[str, Field(description="Selected workflow element ID.")],
+        form_id: Annotated[str, Field(description="Optional trigger form ID used for field tokens.")] = "",
+    ) -> NodeSettingsContextResult:
+        """Return one node's current config and its form-field token choices for the UI."""
+        try:
+            config = client.get_element(workflow_id, step_id)
+        except JotformAPIError as error:  # Jotform errors are safe data for the UI.
+            return NodeSettingsContextResult(
+                workflow_id=workflow_id,
+                step_id=step_id,
+                error=str(error),
+            )
+
+        form_fields = []
+        warning = None
+        if form_id:
+            try:
+                form_fields = form_fields_from_questions(client.get_form_questions(form_id))
+            except JotformAPIError as error:  # Keep node editing usable with its saved config.
+                warning = f"Form fields could not be refreshed: {error}"
+
+        return NodeSettingsContextResult(
+            workflow_id=workflow_id,
+            step_id=step_id,
+            config=config,
+            form_fields=form_fields,
+            warning=warning,
+        )
+
+    @apps.tool(
+        resource_uri=WORKFLOW_UI_RESOURCE_URI,
+        title="Save workflow node settings",
+        meta=widget_tool_meta,
+    )
+    async def save_node_settings(
+        workflow_id: Annotated[str, Field(description="Workflow ID containing the selected node.")],
+        step_id: Annotated[str, Field(description="Selected workflow element ID.")],
+        config: Annotated[dict, Field(description="Only the node settings changed by the user.")],
+    ) -> UpdateStepResult:
+        """Persist one node edit through the same updateTree path as update_step."""
+        return building.save_step_settings(
+            client,
+            workflow_id,
+            step_id,
+            config,
+            audit_tool_name="save_node_settings",
+        )
 
     @apps.tool(
         resource_uri=WORKFLOW_UI_RESOURCE_URI,
