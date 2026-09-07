@@ -95,7 +95,9 @@ if [[ -z "$PUBLIC_URL" ]]; then
   exit 1
 fi
 
-export WORKFLOW_SETTINGS_RUNTIME_URL="${WORKFLOW_SETTINGS_RUNTIME_URL:-$PUBLIC_URL/assets/workflow-settings-runtime.js}"
+# This launcher is deliberately self-contained. Ignore any stale CDN/RDS value
+# from .env and bind the app payload + CSP to the tunnel serving this checkout.
+export WORKFLOW_SETTINGS_RUNTIME_URL="$PUBLIC_URL/assets/workflow-settings-runtime.js"
 
 echo "2) Starting MCP server on port $PORT..."
 ./.venv/bin/python api.py &
