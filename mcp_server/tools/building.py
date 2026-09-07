@@ -1432,9 +1432,16 @@ def _normalize_assignee_fields(
                 next_items.append(item)
                 continue
 
-            # 1. Match against form email questions using token/label/qid
+            # 1. Match valid email address string first (a real email is never a form field keyword)
+            clean_raw = raw.strip("{}").strip()
+            if EMAIL_RE.match(raw) or EMAIL_RE.match(clean_raw):
+                next_items.append(_fixed_email_reference(clean_raw if EMAIL_RE.match(clean_raw) else raw))
+                changed = True
+                continue
+
+            # 2. Match against form email questions using token/label/qid (only for non-email tokens)
             matched_qid = _question_id_by_token(email_questions, raw) or _question_id_by_token(questions, raw)
-            if not matched_qid and len(email_questions) == 1 and any(
+            if not matched_qid and "@" not in raw and len(email_questions) == 1 and any(
                 token in raw.lower() for token in ("email", "posta", "mail", "musteri", "müşteri", "submitter", "applicant")
             ):
                 matched_qid = next(iter(email_questions.keys()))
@@ -1454,13 +1461,6 @@ def _normalize_assignee_fields(
                     qid, question = match
             if question is not None:
                 next_items.append(_email_field_reference(qid, question, form_title))
-                changed = True
-                continue
-
-            # 2. Match valid email address string
-            clean_raw = raw.strip("{}").strip()
-            if EMAIL_RE.match(raw) or EMAIL_RE.match(clean_raw):
-                next_items.append(_fixed_email_reference(clean_raw if EMAIL_RE.match(clean_raw) else raw))
                 changed = True
                 continue
 
@@ -1633,9 +1633,15 @@ def _normalize_email_recipients(
             if not raw:
                 continue
 
-            # 1. Match against form email questions using token/label/qid
+            # 1. Match valid email address string first (a real email is never a form field keyword)
+            if EMAIL_RE.match(raw):
+                next_recipients.append(_fixed_email_reference(raw))
+                changed = True
+                continue
+
+            # 2. Match against form email questions using token/label/qid (only for non-email tokens)
             matched_qid = _question_id_by_token(email_questions, raw) or _question_id_by_token(all_questions, raw)
-            if not matched_qid and len(email_questions) == 1 and any(
+            if not matched_qid and "@" not in raw and len(email_questions) == 1 and any(
                 token in raw.lower() for token in ("email", "posta", "mail", "musteri", "müşteri", "submitter", "applicant")
             ):
                 matched_qid = next(iter(email_questions.keys()))
@@ -1645,12 +1651,6 @@ def _normalize_email_recipients(
                 next_recipients.append(_email_field_reference(matched_qid, q, form_title))
                 changed = True
                 used_question_ref = True
-                continue
-
-            # 2. Match valid email address string
-            if EMAIL_RE.match(raw):
-                next_recipients.append(_fixed_email_reference(raw))
-                changed = True
                 continue
 
             # 3. Unknown field-looking tokens must not be guessed.

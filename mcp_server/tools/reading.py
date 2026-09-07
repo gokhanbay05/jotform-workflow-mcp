@@ -78,8 +78,8 @@ def form_fields_from_questions(questions: dict | None) -> list[FormField]:
         FormField(
             field_id=str(qid),
             name=q.get("name") or str(qid),
-            label=q.get("text"),
-            type=q.get("type"),
+            label=q.get("text") or q.get("name") or f"Field #{qid}",
+            type="control_email" if q.get("type") == "control_email" or q.get("validation") == "Email" else q.get("type"),
             required=q.get("required"),
             options=_field_options(q),
         )

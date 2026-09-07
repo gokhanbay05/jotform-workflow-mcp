@@ -29,7 +29,7 @@ from mcp_server.tools.reading import (
 # Bump this whenever the embedded MCP UI or its CSP contract changes. Clients
 # cache `ui://` resources by URI, so reusing a version can leave an older host
 # unable to load a newly configured settings runtime.
-WORKFLOW_UI_RESOURCE_VERSION = 58
+WORKFLOW_UI_RESOURCE_VERSION = 70
 WORKFLOW_UI_RESOURCE_URI = (
     f"ui://jotform/workflows/v{WORKFLOW_UI_RESOURCE_VERSION}.html"
 )
@@ -163,6 +163,10 @@ def create_workflow_apps(client: JotformClient, *, html: str | None = None) -> A
 
         form_fields = []
         warning = None
+        if not form_id:
+            resolved_form_id, _, _ = building._trigger_form_questions(client, workflow_id)
+            form_id = resolved_form_id or ""
+
         if form_id:
             try:
                 form_fields = form_fields_from_questions(client.get_form_questions(form_id))
