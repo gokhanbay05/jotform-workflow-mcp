@@ -1456,10 +1456,11 @@ way":
 ## Running the server
 
 ```bash
+python3 -m venv .venv
+./.venv/bin/pip install -r requirements.txt
 cp .env.example .env      # fill in JOTFORM_API_KEY
-pip install -r requirements.txt
-python -m pytest tests/ -q          # 271 tests, no network, should all pass
-python -m mcp_server.server         # boots the stdio server
+./.venv/bin/python -m pytest tests/ -q  # 271 tests, no network, should all pass
+./.venv/bin/python -m mcp_server.server # boots the stdio server
 ```
 
 Or via the launcher (handles working-directory issues MCP clients are
@@ -1516,6 +1517,8 @@ For a remote ChatGPT or Claude connector, start the shareable development
 server with:
 
 ```bash
+python3 -m venv .venv
+./.venv/bin/pip install -r requirements.txt
 cp .env.example .env      # once; add your own JOTFORM_API_KEY
 ./run_with_tunnel.sh
 ```
