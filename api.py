@@ -23,12 +23,15 @@ Run:
 Then tunnel port 8000 and point the connector's Server URL at
 <tunnel>/mcp. The historical /sse URL remains available as an alias.
 """
+import os
+
 import uvicorn
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from mcp_server.audit_log import write_event
+from mcp_server.http_assets import register_workflow_ui_asset_routes
 from mcp_server.server import mcp
 
 # sse_app(), given no explicit `host`, defaults that parameter to "127.0.0.1"
@@ -172,6 +175,7 @@ async def reset_session_endpoint(request):
 
 app.routes.append(Route("/session/reset", endpoint=reset_session_endpoint, methods=["GET", "POST"]))
 app.routes.append(Route("/session/new", endpoint=reset_session_endpoint, methods=["GET", "POST"]))
+register_workflow_ui_asset_routes(app)
 app.add_middleware(AuditHTTPMiddleware)
 
 # ChatGPT and Claude connectors need to reach this from different origins —
@@ -256,5 +260,6 @@ app.add_route("/.well-known/oauth-protected-resource/sse", oauth_meta, methods=[
 
 
 if __name__ == "__main__":
-    print("SSE server starting on http://127.0.0.1:8000/sse")
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    port = int(os.environ.get("PORT", "8000"))
+    print(f"MCP HTTP server starting on http://0.0.0.0:{port}/mcp")
+    uvicorn.run(app, host="0.0.0.0", port=port)

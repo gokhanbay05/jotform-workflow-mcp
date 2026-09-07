@@ -8,6 +8,7 @@ import os
 
 import uvicorn
 from mcp.server.transport_security import TransportSecuritySettings
+from mcp_server.http_assets import register_workflow_ui_asset_routes
 from mcp_server.server import mcp
 from starlette.routing import Route
 
@@ -26,6 +27,7 @@ app.routes.extend(
         Route("/sse", endpoint=_mcp_endpoint),
     )
 )
+register_workflow_ui_asset_routes(app)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8000"))
