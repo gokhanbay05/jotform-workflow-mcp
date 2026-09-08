@@ -2128,6 +2128,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
         form_id = _extract_ai_form_id(content)
         if not form_id:
             return CreateAIFormResult(error=f"No form id in AI form response: {content!r}")
+        template_search_state.mark_template_backed_form(form_id)
 
         questions = content.get("questions") if isinstance(content.get("questions"), dict) else {}
         title = _extract_ai_form_title(content, questions)
@@ -2461,7 +2462,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
         if trigger_type not in {"form", "schedule"}:
             return BuildWorkflowBulkResult(error="trigger_type must be either 'form' or 'schedule'.")
         creating_new_workflow = not workflow_id
-        if creating_new_workflow and not template_search_state.template_search_completed():
+        if creating_new_workflow and not template_search_state.template_search_completed_for_form(trigger_form_id):
             return BuildWorkflowBulkResult(
                 error="Template search is required before creating a new workflow.",
                 hint="Call search_workflow_templates with a concise English workflow query, then retry build_workflow_bulk.",

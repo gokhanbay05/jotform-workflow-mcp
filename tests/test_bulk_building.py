@@ -357,7 +357,7 @@ def test_new_workflow_writes_require_template_search_in_the_mcp_session():
         form_result = mcp.tools["create_form_with_ai"]("Create a help desk form.")
         build_result = mcp.tools["build_workflow_bulk"](
             title="Help Desk Workflow",
-            trigger_form_id="form_ai_1",
+            trigger_form_id="form_without_template_search",
         )
 
     assert "Template search is required" in form_result.error
@@ -383,6 +383,37 @@ def test_template_search_marker_allows_new_form_creation_in_the_mcp_session():
         "form_type": "classic",
         "language": "en",
     }]
+
+
+def test_template_backed_form_allows_new_workflow_in_a_later_mcp_session():
+    mcp = DummyMCP()
+    client = DummyClient()
+    building.register(mcp, client)
+
+    with bind_context(session_id="template-search-form-session"):
+        template_search_state.mark_template_search()
+        form = mcp.tools["create_form_with_ai"]("Create a help desk form.")
+
+    with bind_context(session_id="template-search-build-session"):
+        result = mcp.tools["build_workflow_bulk"](
+            title="Help Desk Workflow",
+            trigger_form_id=form.form_id,
+            steps=[
+                StepSpec(
+                    ref="support_task",
+                    type="workflow_assign_task",
+                    config={
+                        "assignee": "support@workflow.invalid",
+                        "taskDescription": "Resolve the ticket.",
+                        "outcomes": ["Complete"],
+                    },
+                ),
+            ],
+            connections=[ConnectionSpec(from_ref="start", to_ref="support_task")],
+        )
+
+    assert result.error is None
+    assert result.workflow_id == "wf_new_1"
 
 
 def test_build_workflow_bulk_creates_workflow_with_trigger_form_when_workflow_id_omitted():

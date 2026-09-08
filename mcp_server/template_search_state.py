@@ -9,6 +9,7 @@ from mcp_server.telemetry_context import get_current_session_id
 
 _SEARCH_TTL_SECONDS = 60 * 60
 _searches: dict[str, float] = {}
+_template_backed_forms: dict[str, float] = {}
 _lock = threading.Lock()
 
 
@@ -38,7 +39,33 @@ def template_search_completed() -> bool:
     return searched_at is not None and now - searched_at <= _SEARCH_TTL_SECONDS
 
 
+def mark_template_backed_form(form_id: str) -> None:
+    """Remember that an AI form was created after discovery."""
+    if not form_id or not template_search_completed():
+        return
+    now = time.monotonic()
+    with _lock:
+        _template_backed_forms[str(form_id)] = now
+        _prune(now)
+
+
+def template_search_completed_for_form(form_id: str) -> bool:
+    """Allow a template-backed trigger form across connector session boundaries."""
+    if template_search_completed():
+        return True
+    if not form_id:
+        return False
+    now = time.monotonic()
+    with _lock:
+        searched_at = _template_backed_forms.get(str(form_id))
+        _prune(now)
+    return searched_at is not None and now - searched_at <= _SEARCH_TTL_SECONDS
+
+
 def _prune(now: float) -> None:
     for session_id, searched_at in list(_searches.items()):
         if now - searched_at > _SEARCH_TTL_SECONDS:
             del _searches[session_id]
+    for form_id, searched_at in list(_template_backed_forms.items()):
+        if now - searched_at > _SEARCH_TTL_SECONDS:
+            del _template_backed_forms[form_id]
