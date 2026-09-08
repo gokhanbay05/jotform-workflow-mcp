@@ -231,6 +231,41 @@ def test_create_form_with_ai_strips_stop_after_form_prompt():
     assert result.next_required_tool == "build_workflow_bulk"
 
 
+def test_bind_and_verify_trigger_tolerates_eventual_readback(monkeypatch):
+    client = DummyClient()
+    client.elements[0] = {
+        "element_id": 1,
+        "type": "workflow_start_point",
+        "position": {"x": 0, "y": 0},
+    }
+    reads = []
+
+    def delayed_get_element(workflow_id, element_id):
+        reads.append((workflow_id, element_id))
+        if len(reads) == 1:
+            return {
+                "element_id": 1,
+                "type": "workflow_start_point",
+                "resourceID": None,
+                "resourceType": "FORM",
+            }
+        return {
+            "element_id": 1,
+            "type": "workflow_start_point",
+            "resourceID": "form_delayed",
+            "resourceType": "FORM",
+        }
+
+    monkeypatch.setattr(building, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(client, "get_element", delayed_get_element)
+
+    result = building._bind_and_verify_trigger(client, "wf_1", "form_delayed", "Demo")
+
+    assert result is None
+    assert client.bound_trigger_forms == [("wf_1", "form_delayed")]
+    assert len(reads) == 2
+
+
 def test_decoupled_university_workflow_runs_create_build_show_with_zero_retry():
     mcp = DummyMCP()
     client = DecoupledFlowClient()

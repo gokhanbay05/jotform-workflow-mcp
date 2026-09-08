@@ -19,6 +19,7 @@ import re
 import unicodedata
 from copy import deepcopy
 from datetime import datetime, time, timedelta, timezone
+from time import sleep
 from typing import Annotated
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -1997,18 +1998,29 @@ def _bind_and_verify_trigger(
             trigger_form_url=_form_url(trigger_form_id),
             error=f"Workflow created, but setting trigger form failed: {e}",
         )
-    try:
-        start = client.get_element(workflow_id, 1)
-    except JotformAPIError as e:
+    start = None
+    last_error: JotformAPIError | None = None
+    for attempt, delay in enumerate((0.0, 0.35, 0.75, 1.25)):
+        if delay:
+            sleep(delay)
+        try:
+            start = client.get_element(workflow_id, 1)
+        except JotformAPIError as e:
+            last_error = e
+            continue
+        if str(start.get("resourceID")) == str(trigger_form_id):
+            return None
+
+    if start is None and last_error is not None:
         return CreateWorkflowResult(
             workflow_id=str(workflow_id), title=title,
             workflow_url=_workflow_url(str(workflow_id)),
             trigger_form_id=trigger_form_id,
             trigger_form_url=_form_url(trigger_form_id),
-            error=f"Workflow created, trigger form set, but could not verify: {e}",
+            error=f"Workflow created, trigger form set, but could not verify: {last_error}",
         )
 
-    if str(start.get("resourceID")) != str(trigger_form_id):
+    if not isinstance(start, dict) or str(start.get("resourceID")) != str(trigger_form_id):
         return CreateWorkflowResult(
             workflow_id=str(workflow_id), title=title,
             workflow_url=_workflow_url(str(workflow_id)),
