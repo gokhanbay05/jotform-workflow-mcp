@@ -348,7 +348,7 @@ def test_build_workflow_bulk_linear_chain():
     assert client.created_forms == []
 
 
-def test_new_workflow_writes_require_template_search_in_the_mcp_session():
+def test_new_workflow_build_requires_template_search_in_the_mcp_session():
     mcp = DummyMCP()
     client = DummyClient()
     building.register(mcp, client)
@@ -360,11 +360,14 @@ def test_new_workflow_writes_require_template_search_in_the_mcp_session():
             trigger_form_id="form_without_template_search",
         )
 
-    assert "Template search is required" in form_result.error
-    assert "search_workflow_templates" in form_result.hint
+    assert form_result.error is None
     assert "Template search is required" in build_result.error
     assert "search_workflow_templates" in build_result.hint
-    assert client.created_forms == []
+    assert client.created_forms == [{
+        "prompt": "Create a help desk form.",
+        "form_type": "classic",
+        "language": "en",
+    }]
     assert client.created_workflows == []
 
 

@@ -2112,11 +2112,6 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
         operation_id = str(operation_id or "").strip()
         if len(operation_id) > 120:
             return CreateAIFormResult(error="operation_id must be 120 characters or fewer.")
-        if not template_search_state.template_search_completed():
-            return CreateAIFormResult(
-                error="Template search is required before creating a workflow form.",
-                hint="Call search_workflow_templates with a concise English workflow query, then retry create_form_with_ai.",
-            )
         try:
             create_kwargs = {"form_type": form_type, "language": language}
             if operation_id:
