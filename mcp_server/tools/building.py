@@ -26,7 +26,15 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from mcp.server import MCPServer
 from pydantic import Field
 
-from mcp_server import audit_log, revision_log, schema_registry, sync_state, tree_builder as tb, workflow_inspector
+from mcp_server import (
+    audit_log,
+    revision_log,
+    schema_registry,
+    sync_state,
+    template_search_state,
+    tree_builder as tb,
+    workflow_inspector,
+)
 from mcp_server.integrations import supported_integration_subtypes_text
 from mcp_server.jotform_client import (
     ConflictError,
@@ -2104,6 +2112,11 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
         operation_id = str(operation_id or "").strip()
         if len(operation_id) > 120:
             return CreateAIFormResult(error="operation_id must be 120 characters or fewer.")
+        if not template_search_state.template_search_completed():
+            return CreateAIFormResult(
+                error="Template search is required before creating a workflow form.",
+                hint="Call search_workflow_templates with a concise English workflow query, then retry create_form_with_ai.",
+            )
         try:
             create_kwargs = {"form_type": form_type, "language": language}
             if operation_id:
@@ -2448,6 +2461,11 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
         if trigger_type not in {"form", "schedule"}:
             return BuildWorkflowBulkResult(error="trigger_type must be either 'form' or 'schedule'.")
         creating_new_workflow = not workflow_id
+        if creating_new_workflow and not template_search_state.template_search_completed():
+            return BuildWorkflowBulkResult(
+                error="Template search is required before creating a new workflow.",
+                hint="Call search_workflow_templates with a concise English workflow query, then retry build_workflow_bulk.",
+            )
         normalized_delete_ids = [str(sid).strip() for sid in (delete_step_ids or []) if str(sid).strip()]
         normalized_delete_link_ids = [
             str(link_id).strip()

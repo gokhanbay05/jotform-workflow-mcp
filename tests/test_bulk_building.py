@@ -5,8 +5,9 @@ from mcp.server import MCPServer
 
 from mcp_server.jotform_client import JotformAPIError, PartialWorkflowCreateError
 from mcp_server.models import ConnectionSpec, StepSpec, StepUpdateSpec
-from mcp_server import tree_builder as tb
+from mcp_server import template_search_state, tree_builder as tb
 from mcp_server.tools import building
+from mcp_server.telemetry_context import bind_context
 from mcp_server.ui import create_workflow_apps
 
 
@@ -345,6 +346,43 @@ def test_build_workflow_bulk_linear_chain():
     assert "ask whether the user wants to enable it" in result.hint
     assert client.created_workflows == []
     assert client.created_forms == []
+
+
+def test_new_workflow_writes_require_template_search_in_the_mcp_session():
+    mcp = DummyMCP()
+    client = DummyClient()
+    building.register(mcp, client)
+
+    with bind_context(session_id="template-search-required"):
+        form_result = mcp.tools["create_form_with_ai"]("Create a help desk form.")
+        build_result = mcp.tools["build_workflow_bulk"](
+            title="Help Desk Workflow",
+            trigger_form_id="form_ai_1",
+        )
+
+    assert "Template search is required" in form_result.error
+    assert "search_workflow_templates" in form_result.hint
+    assert "Template search is required" in build_result.error
+    assert "search_workflow_templates" in build_result.hint
+    assert client.created_forms == []
+    assert client.created_workflows == []
+
+
+def test_template_search_marker_allows_new_form_creation_in_the_mcp_session():
+    mcp = DummyMCP()
+    client = DummyClient()
+    building.register(mcp, client)
+
+    with bind_context(session_id="template-search-complete"):
+        template_search_state.mark_template_search()
+        result = mcp.tools["create_form_with_ai"]("Create a help desk form.")
+
+    assert result.error is None
+    assert client.created_forms == [{
+        "prompt": "Create a help desk form.",
+        "form_type": "classic",
+        "language": "en",
+    }]
 
 
 def test_build_workflow_bulk_creates_workflow_with_trigger_form_when_workflow_id_omitted():

@@ -6,7 +6,7 @@ import re
 from typing import Annotated, Any
 from pydantic import BaseModel, Field
 from mcp.server import MCPServer
-from mcp_server import audit_log, rag_engine
+from mcp_server import audit_log, rag_engine, template_search_state
 
 
 class TemplateItem(BaseModel):
@@ -286,4 +286,6 @@ def register(mcp: MCPServer) -> None:
         inferred suggested_form_fields. Treat low/no matches as no template and continue;
         never force an unrelated blueprint onto the user's request.
         """
-        return search_templates_tool(query, top_k)
+        result = search_templates_tool(query, top_k)
+        template_search_state.mark_template_search()
+        return result
