@@ -2423,6 +2423,13 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
         """
         Create or mutate a workflow graph with one final updateTree write.
 
+        New workflow order: search_workflow_templates -> create_form_with_ai
+        (form-submission workflows) -> build_workflow_bulk -> show_workflow.
+        Do not call this first for a new form-submission workflow; pass the
+        returned form_id as trigger_form_id. Never include the template's
+        workflow_start_point as a step; use 'start' only as a connection source.
+        Keep approval/task taskDescription values plain text without form-field tags.
+
         Use step_updates for existing configuration edits and steps for new nodes.
         For scheduled workflows that assign a form, create the form first and pass
         its ID as workflow_assign_form.formID; do not use it as trigger_form_id.

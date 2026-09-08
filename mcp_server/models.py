@@ -607,7 +607,11 @@ class UpdateStepResult(BaseModel):
 
 class StepSpec(BaseModel):
     ref: str = Field(
-        description="A unique temporary reference name for this step in the bulk request (e.g. 'approval_1', 'notify_mgr', 'reject_email')."
+        description=(
+            "A unique temporary reference name for a user-created step in the bulk request "
+            "(e.g. 'approval_1', 'notify_mgr', 'reject_email'). Never use 'start' or '1'; "
+            "the trigger form start point is created by the server."
+        )
     )
     type: str = Field(
         description=(

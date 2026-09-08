@@ -28,7 +28,10 @@ For a new workflow:
    `operation_id` for form-submission
    workflows. For scheduled workflows, call it with `trigger_type="schedule"`,
    `trigger_schedule`, complete `steps`, and `connections`. If the tool returns
-   a correctable argument error, fix that specific issue and retry.
+   a correctable argument error, fix that specific issue and retry. Never put
+   the template's `workflow_start_point` in `steps`; use `start` only as a
+   connection source. Keep approval/task `taskDescription` plain text without
+   form-field tags.
 4. Call `show_workflow` once as the final read-only presentation. Never make a
    workflow mutation after showing it.
 
