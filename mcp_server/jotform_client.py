@@ -685,11 +685,18 @@ class JotformClient:
 
     def set_trigger_form(self, workflow_id: str, form_id: str) -> dict:
         """Bind a form to the workflow start point and persist it on the canvas."""
-        self._request(
-            "POST",
-            f"/workflow/{workflow_id}/setResource",
-            json_body={"resourceType": "FORM", "resourceID": form_id},
-        )
+        try:
+            self._request(
+                "POST",
+                f"/workflow/{workflow_id}/setResource",
+                json_body={"resourceType": "FORM", "resourceID": form_id},
+            )
+        except JotformAPIError as error:
+            # Some accounts no longer have access to this legacy endpoint.
+            # updateTree below persists the same start-point resource and is
+            # the write path used by the current workflow builder.
+            if error.status not in {401, 409}:
+                raise
         update_tree_url = f"/workflow/{workflow_id}/updateTree"
         tree_payload = {
             "links": [],
