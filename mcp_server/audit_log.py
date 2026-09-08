@@ -513,63 +513,6 @@ def list_function_traces(*, limit: int = 100, offset: int = 0, session_id: str =
     }
 
 
-def list_feature_requests(*, limit: int = 100, offset: int = 0) -> dict[str, Any]:
-    """Return recorded feature request telemetry for dashboard views."""
-    limit = max(1, min(int(limit), 500))
-    offset = max(0, int(offset))
-    paths = _session_log_paths()
-    if not paths:
-        return {
-            "feature_requests": [],
-            "limit": limit,
-            "offset": offset,
-            "count": 0,
-            "has_more": False,
-            "next_offset": None,
-        }
-
-    events: list[dict[str, Any]] = []
-    for path in paths:
-        try:
-            lines = path.read_text(encoding="utf-8").splitlines()
-        except OSError:
-            continue
-        for line in reversed(lines):
-            try:
-                entry = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if entry.get("event_type") != "feature_request.recorded":
-                continue
-            events.append({
-                "timestamp": entry.get("timestamp"),
-                "session_id": entry.get("session_id"),
-                "request_id": entry.get("request_id"),
-                "category": entry.get("category"),
-                "request_summary": entry.get("request_summary"),
-                "workflow_id": entry.get("workflow_id"),
-                "workflow_url": entry.get("workflow_url"),
-                "top_template_id": entry.get("top_template_id"),
-                "top_template_title": entry.get("top_template_title"),
-                "top_template_score": entry.get("top_template_score"),
-                "close_match_threshold": entry.get("close_match_threshold"),
-                "missing_capability": entry.get("missing_capability"),
-                "evidence": entry.get("evidence"),
-                "dashboard_cluster_threshold": entry.get("dashboard_cluster_threshold"),
-            })
-
-    page = events[offset:offset + limit]
-    next_offset = offset + limit if offset + limit < len(events) else None
-    return {
-        "feature_requests": page,
-        "limit": limit,
-        "offset": offset,
-        "count": len(page),
-        "has_more": next_offset is not None,
-        "next_offset": next_offset,
-    }
-
-
 def _tool_call_allowed(name: str) -> bool:
     return name in FAST_TOOLS or name in APP_CALLABLE_TOOLS
 

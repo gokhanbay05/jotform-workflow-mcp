@@ -10,7 +10,7 @@ def test_mcp_uses_single_tool_surface_even_when_profile_env_is_set(monkeypatch):
     tools = asyncio.run(mcp.list_tools())
     tool_names = {tool.name for tool in tools}
 
-    assert len(tools) == 18
+    assert len(tools) == 17
     assert "build_workflow_bulk" in tool_names
     assert "apply_workflow_canvas_diff" not in tool_names
     assert "create_form_with_ai" in tool_names
@@ -21,7 +21,7 @@ def test_mcp_uses_single_tool_surface_even_when_profile_env_is_set(monkeypatch):
     assert "save_node_settings" in tool_names
     assert "delete_step" not in tool_names
     assert "restore_workflow_revision" in tool_names
-    assert "record_feature_request" in tool_names
+    assert "record_feature_request" not in tool_names
     assert "get_form_fields" not in tool_names
     assert "create_workflow" not in tool_names
     assert "create_workflow_with_ai_form" not in tool_names
@@ -70,7 +70,6 @@ def test_tool_schemas_expose_decoupled_form_then_workflow_contract(monkeypatch):
     build_tool = tools["build_workflow_bulk"]
     show_tool = tools["show_workflow"]
     publish_tool = tools["publish_workflow"]
-    feature_tool = tools["record_feature_request"]
 
     assert "Call this only after search_workflow_templates" in create_tool.description
     assert "first write" in create_tool.description
@@ -89,8 +88,6 @@ def test_tool_schemas_expose_decoupled_form_then_workflow_contract(monkeypatch):
     assert "explicitly confirms" in publish_tool.input_schema["properties"]["confirm"]["description"]
     assert "allow_draft_recipients" in publish_tool.input_schema["properties"]
     assert "explicitly accepts enabling" in publish_tool.input_schema["properties"]["allow_draft_recipients"]["description"]
-    assert "Call only after `show_workflow`" in feature_tool.description
-    assert "missing_template" in feature_tool.input_schema["properties"]["category"]["description"]
 
     output_schema = create_tool.output_schema
     assert {"form_id", "form_url", "title", "summary", "fields", "next_required_tool", "hint"} <= set(output_schema["properties"])

@@ -30,7 +30,6 @@ FAST_TOOLS = frozenset({
     "publish_workflow",
     "restore_workflow_revision",
     "delete_workflow",
-    "record_feature_request",
 })
 
 DEPRECATED_TOOL_NAMES = frozenset({

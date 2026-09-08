@@ -12,7 +12,6 @@ Tool layers:
                  add_step, connect_steps, disconnect_steps, update_step
   5. risky     — delete_step, publish_workflow, restore_workflow_revision,
                  delete_workflow (confirm=True required to act)
-  6. feedback  — record_feature_request
 """
 from dotenv import load_dotenv
 load_dotenv()
@@ -21,12 +20,12 @@ from mcp_server.audit_log import AuditedMCPServer, auto_instrument_module  # noq
 from mcp_server.jotform_client import JotformClient  # noqa: E402
 import mcp_server.jotform_client as jotform_client_mod  # noqa: E402
 import mcp_server.tree_builder as tree_builder_mod  # noqa: E402
-from mcp_server.tools import building, discovery, feature_requests, reading, risky, templates  # noqa: E402
+from mcp_server.tools import building, discovery, reading, risky, templates  # noqa: E402
 from mcp_server.ui import create_workflow_apps  # noqa: E402
 
 # Auto-instrument all functions in these modules (only log spans taking >= 1.0ms)
 for mod in (
-    building, discovery, feature_requests, reading, risky, templates
+    building, discovery, reading, risky, templates
 ):
     auto_instrument_module(mod, min_duration_ms=1.0)
 
@@ -87,7 +86,6 @@ reading.register(mcp, client)
 templates.register(mcp)
 building.register(mcp, client)
 risky.register(mcp, client)
-feature_requests.register(mcp)
 
 
 if __name__ == "__main__":
