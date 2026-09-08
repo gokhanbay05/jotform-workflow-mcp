@@ -95,6 +95,8 @@ Use exact email field IDs/names/labels for form-backed recipients; the server
 will convert them to Jotform recipient chips. Do not guess camelCase variables
 from labels. When summarizing emails to the user, describe dynamic fields by
 their visible labels instead of exposing raw Jotform tags like `{q2_textbox0}`.
+Keep `taskDescription` plain text for approval and task steps; do not add form
+field tags there.
 Use `get_step_schema` only for an
 unfamiliar/specialized type, batching multiple types in one call when needed.
 

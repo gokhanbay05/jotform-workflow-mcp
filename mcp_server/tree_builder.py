@@ -41,6 +41,14 @@ LINK_DEFAULTS = {
     "toPortName": "DYNAMIC_TOP_1_In",
 }
 
+TASK_DESCRIPTION_STEP_TYPES = frozenset((
+    "workflow_approval",
+    "workflow_assign_task",
+    "workflow_assign",
+    "workflow_assign_form",
+))
+FORM_FIELD_TOKEN_RE = re.compile(r"\{[^{}\r\n]+\}")
+
 
 def _normalize_after_unit(unit: str) -> str:
     normalized = str(unit).strip().lower()
@@ -786,6 +794,16 @@ def validate_config(step_type: str, config: dict) -> tuple[dict, list[str]]:
                 f"'{key}'={value!r} not in {allowed}; field dropped"
             )
             continue
+        if (
+            canonical_type in TASK_DESCRIPTION_STEP_TYPES
+            and key == "taskDescription"
+            and isinstance(value, str)
+            and FORM_FIELD_TOKEN_RE.search(value)
+        ):
+            raise ValidationError(
+                "taskDescription must be plain text; form-field tags are supported only "
+                "in email subject/content and recipients."
+            )
         if canonical_type == "workflow_conditional_branch" and key == "outcomes":
             value = _validate_conditional_branch_outcomes(value)
         if canonical_type == "workflow_assign_task" and key == "outcomes":

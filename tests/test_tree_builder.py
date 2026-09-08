@@ -36,6 +36,14 @@ def test_position_no_anchor_goes_below_everything():
     assert pos["y"] > 500
 
 
+def test_task_description_rejects_form_field_tags():
+    with pytest.raises(tb.ValidationError, match="taskDescription must be plain text"):
+        tb.validate_config(
+            "workflow_assign_task",
+            {"taskDescription": "Review {q2_fullname0}."},
+        )
+
+
 def test_position_with_anchor_goes_directly_below_it():
     elements = [{"element_id": "5", "position": {"x": 100, "y": 200}}]
     pos = tb.compute_position(elements, after_step_id="5")

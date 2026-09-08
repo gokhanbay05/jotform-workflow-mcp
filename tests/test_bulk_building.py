@@ -649,7 +649,7 @@ def test_schedule_assigned_form_fields_can_drive_email_recipients_before_create(
                 config={
                     "approver": "manager@workflow.invalid",
                     "name": "Manager Approval",
-                    "taskDescription": "Review {Employee Name}'s report for {Week Ending Date}.",
+                    "taskDescription": "Review the employee's weekly report.",
                 },
             ),
             StepSpec(
