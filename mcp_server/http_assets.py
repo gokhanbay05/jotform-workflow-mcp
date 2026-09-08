@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from starlette.responses import FileResponse, PlainTextResponse
+from starlette.responses import PlainTextResponse, Response
 from starlette.routing import Route
 
 WORKFLOW_SETTINGS_RUNTIME_ROUTE = "/assets/workflow-settings-runtime.js"
@@ -48,8 +48,8 @@ async def serve_workflow_settings_runtime(_request):
             "Workflow settings runtime has not been built.",
             status_code=404,
         )
-    return FileResponse(
-        runtime_path,
+    return Response(
+        runtime_path.read_bytes(),
         media_type="application/javascript",
         headers={
             "Cache-Control": "no-store",
