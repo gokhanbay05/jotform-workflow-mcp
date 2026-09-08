@@ -2414,41 +2414,19 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
         """
         Create or mutate a workflow graph with one final updateTree write.
 
-        New form-submission flow: search_workflow_templates -> create_form_with_ai -> build_workflow_bulk -> show_workflow.
-        New scheduled flow: search_workflow_templates -> build_workflow_bulk(trigger_type="schedule", trigger_schedule=...) -> show_workflow.
-        New scheduled assigned-form flow: search_workflow_templates -> create_form_with_ai -> build_workflow_bulk(trigger_type="schedule", trigger_schedule=..., workflow_assign_form.formID=...) -> show_workflow.
-        Do not use external Jotform form plugins/tools for the AI trigger form.
-        Existing workflow flow: get_workflow -> build_workflow_bulk -> show_workflow.
         Use step_updates for existing configuration edits and steps for new nodes.
-        If the user asks to add a 3rd-party integration (Slack, WhatsApp,
-        Zendesk, Asana, Google Sheets, Microsoft Teams, etc.), you MUST add it
-        as a blank shell step: set type="workflow_integration", set StepSpec
-        subType to the specific supported integration ID, and DO NOT fill any
-        authentication, OAuth, account, mapping, channel, project, ticket, or
-        message configuration fields. The user completes settings in Jotform UI.
-        Missing content/subject/body/outcome config is an error; the server validates
-        but does not invent email content or fallback graph nodes for you. Draft
-        reasonable content from the user's request and template blueprint. For new draft workflows,
-        missing staff approvers/assignees are filled with reserved role placeholders
-        such as hr@workflow.invalid or manager@workflow.invalid. Do not ask the user
-        solely for draft staff emails. Alias normalization is limited to equivalent
-        field names. Deletes that would orphan downstream nodes return a preview and
-        require explicit confirmation. Every bulk write leaves the workflow
-        DISABLED, including edits to an existing workflow; publish_workflow is
-        only for a later explicit user request to enable it.
+        For scheduled workflows that assign a form, create the form first and pass
+        its ID as workflow_assign_form.formID; do not use it as trigger_form_id.
 
-        For common workflows, do not call list_step_types or get_step_schema first.
-        Use these known configs directly:
+        Common configs:
         approval: type=workflow_approval, config has name, approver=hr@workflow.invalid if unknown, taskDescription.
         task: type=workflow_assign_task, config has name, assignee=manager@workflow.invalid if unknown, taskDescription, outcomes=["Complete"].
         assign form: type=workflow_assign_form, config has name, formID, assignee, requireLogin="Yes".
-        Use assign form to add a form after a scheduled start; do not bind that form as trigger_form_id.
-        integration shell: type=workflow_integration, subType is one of the supported IDs; config is empty or name only.
         email: type=workflow_send_email, config has name, to, subject, content. Use a trigger-form email field for applicant/customer notifications.
-        binary branch: type=workflow_binary_decision with conditionTerms and TRUE/FALSE connections.
-        Choose the number of steps from the user's domain and detail level; do not follow a fixed
-        count. Include intake/receipt notification, review/approval/task paths, parallel work,
-        escalation, and outcome notifications only when they are useful.
+        binary branch: type=workflow_binary_decision, config has name and
+        conditionTerms=[{"field":"Priority","operator":"equals","value":"High"}];
+        connect its TRUE and FALSE outcomes. conditionTermsMatchType is optional
+        (All by default; use Any for an OR condition).
         """
         workflow_id = str(workflow_id or "").strip()
         operation_id = str(operation_id or "").strip()

@@ -75,12 +75,10 @@ def test_tool_schemas_expose_decoupled_form_then_workflow_contract(monkeypatch):
     assert "not" in create_tool.description and "first tool call" in create_tool.description
     assert "workflow_assign_form.formID" in create_tool.description
     assert "exact field_id, name, label, type" in create_tool.description
-    assert "search_workflow_templates -> create_form_with_ai -> build_workflow_bulk -> show_workflow" in build_tool.description
-    assert 'trigger_type="schedule"' in build_tool.description
+    assert "step_updates for existing configuration edits" in build_tool.description
     assert "workflow_assign_form" in build_tool.description
     assert "formID" in build_tool.description
-    assert "workflow_integration" in build_tool.description
-    assert "blank shell step" in build_tool.description
+    assert "conditionTermsMatchType" in build_tool.description
     assert "assigned_forms" in build_tool.output_schema["properties"]
     assert "Call immediately after build_workflow_bulk" in show_tool.description
     assert publish_tool.input_schema["properties"]["confirm"]["default"] is False
