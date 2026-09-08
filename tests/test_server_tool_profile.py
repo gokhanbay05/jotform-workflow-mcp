@@ -58,6 +58,8 @@ def test_server_instructions_describe_decoupled_three_tool_sequence(monkeypatch)
     assert "Do not answer the user" in instructions
     assert "assigned_forms[].form_url" in instructions
     assert "The iframe is permanently read-only" in instructions
+    assert '"step_type": "workflow_binary_decision"' in instructions
+    assert "conditionTermsMatchType" in instructions
 
 
 def test_tool_schemas_expose_decoupled_form_then_workflow_contract(monkeypatch):

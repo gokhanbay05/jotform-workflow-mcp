@@ -62,7 +62,13 @@ Use show_workflows only for browsing multiple workflows. Use show_workflow for o
 
     from mcp_server.schema_registry import get_simplified_schema
     import json
-    core_types = ["workflow_send_email", "workflow_approval", "workflow_assign_task", "workflow_assign_form"]
+    core_types = [
+        "workflow_send_email",
+        "workflow_approval",
+        "workflow_assign_task",
+        "workflow_assign_form",
+        "workflow_binary_decision",
+    ]
     core_schemas = json.dumps([get_simplified_schema(t) for t in core_types], indent=2)
     
     return instructions + f"\n\nHere are the exact JSON schemas for the most common step types. Do NOT invent fields outside these schemas when building steps of these types:\n\n{core_schemas}"
