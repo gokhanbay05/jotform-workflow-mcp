@@ -295,7 +295,9 @@ def register(mcp: MCPServer) -> None:
         ] = 1,
     ) -> TemplateSearchResult:
         """
-        Always search the local template catalog first for a close blueprint when building a new workflow.
+        Always search the local template catalog first for a close blueprint when
+        building a new workflow. This discovery call is required before any
+        workflow write, even when the user supplied concrete details.
 
         Use a concise English query. A result includes compact graph structure and
         inferred suggested_form_fields. Treat low/no matches as no template and continue;

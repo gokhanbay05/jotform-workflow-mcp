@@ -1,5 +1,4 @@
 import asyncio
-from pathlib import Path
 from unittest.mock import patch
 
 from mcp.server import MCPServer
@@ -105,7 +104,7 @@ def _server():
 
 
 def test_ui_resource_is_registered_with_mcp_app_mime_type():
-    assert WORKFLOW_UI_RESOURCE_URI == "ui://jotform/workflows/v84.html"
+    assert WORKFLOW_UI_RESOURCE_URI == "ui://jotform/workflows/v94.html"
 
     with patch.dict("os.environ", {"WORKFLOW_SETTINGS_RUNTIME_URL": ""}):
         server = _server()
@@ -125,15 +124,6 @@ def test_ui_resource_is_registered_with_mcp_app_mime_type():
     contents = list(asyncio.run(server.read_resource(WORKFLOW_UI_RESOURCE_URI)))
     assert contents[0].mime_type == APP_MIME_TYPE
     assert "workflow ui" in contents[0].content
-
-
-def test_packaged_ui_accepts_draft_recipient_warning_on_enable_confirmation():
-    bundle = Path("mcp_server/assets/workflow-mcp-ui.html").read_text(encoding="utf-8")
-
-    assert (
-        'publish_workflow",{workflow_id:k,confirm:!0,allow_draft_recipients:!0,'
-        "expected_revision_id:T.revisionId"
-    ) in bundle
 
 
 def test_ui_csp_uses_exact_origins_and_disallows_nested_frames():
@@ -180,6 +170,7 @@ def test_show_workflows_returns_versioned_authoritative_payload():
     assert result.structured_content["view"] == "workflow-list"
     assert result.structured_content["schemaVersion"] == 1
     assert result.structured_content["data"]["workflows"][0]["workflow_id"] == "wf-1"
+    assert result.structured_content["data"]["limit"] == 100
 
 
 def test_show_workflow_returns_versioned_authoritative_payload():

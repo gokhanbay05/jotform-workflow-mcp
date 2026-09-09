@@ -10,10 +10,12 @@ def test_mcp_uses_single_tool_surface_even_when_profile_env_is_set(monkeypatch):
     tools = asyncio.run(mcp.list_tools())
     tool_names = {tool.name for tool in tools}
 
-    assert len(tools) == 17
+    assert len(tools) == 16
     assert "build_workflow_bulk" in tool_names
     assert "apply_workflow_canvas_diff" not in tool_names
     assert "create_form_with_ai" in tool_names
+    assert "show_workflows" in tool_names
+    assert "list_workflows" not in tool_names
     assert "search_workflow_templates" in tool_names
     assert "get_workflow_template" not in tool_names
     assert "get_step_details" in tool_names

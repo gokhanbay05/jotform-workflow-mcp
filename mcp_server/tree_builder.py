@@ -684,7 +684,30 @@ def compute_layered_dag_positions(
 # element payloads
 # --------------------------------------------------------------------------
 
-def validate_config(step_type: str, config: dict) -> tuple[dict, list[str]]:
+def _plain_task_description(value: str) -> str:
+    """Remove unsupported dynamic tokens while keeping useful static text."""
+    kept_lines: list[str] = []
+    for line in value.splitlines():
+        if not FORM_FIELD_TOKEN_RE.search(line):
+            kept_lines.append(line)
+            continue
+        static_line = FORM_FIELD_TOKEN_RE.sub("", line)
+        static_line = re.sub(r"[ \t]+", " ", static_line).strip(" \t:;,.!?-")
+        # Keep sentence fragments, but drop label-only lines such as
+        # "Subject: {q4_textbox2}".
+        if len(static_line.split()) >= 2:
+            kept_lines.append(static_line)
+
+    cleaned = re.sub(r"\n{3,}", "\n\n", "\n".join(kept_lines)).strip()
+    return cleaned or "Review the submitted form details."
+
+
+def validate_config(
+    step_type: str,
+    config: dict,
+    *,
+    sanitize_task_descriptions: bool = False,
+) -> tuple[dict, list[str]]:
     """
     Filter caller-supplied fields against the simplified schema.
 
@@ -800,10 +823,17 @@ def validate_config(step_type: str, config: dict) -> tuple[dict, list[str]]:
             and isinstance(value, str)
             and FORM_FIELD_TOKEN_RE.search(value)
         ):
-            raise ValidationError(
-                "taskDescription must be plain text; form-field tags are supported only "
-                "in email subject/content and recipients."
-            )
+            if sanitize_task_descriptions:
+                value = _plain_task_description(value)
+                warnings.append(
+                    "taskDescription form-field tags removed because Jotform task descriptions "
+                    "support plain text only"
+                )
+            else:
+                raise ValidationError(
+                    "taskDescription must be plain text; form-field tags are supported only "
+                    "in email subject/content and recipients."
+                )
         if canonical_type == "workflow_conditional_branch" and key == "outcomes":
             value = _validate_conditional_branch_outcomes(value)
         if canonical_type == "workflow_assign_task" and key == "outcomes":

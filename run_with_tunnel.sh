@@ -35,12 +35,9 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 start_tunnel() {
-  local bundled_cloudflared="$REPOSITORY_ROOT/../cloudflared"
-  if command -v cloudflared >/dev/null 2>&1 || [[ -x "$bundled_cloudflared" ]]; then
+  if command -v cloudflared >/dev/null 2>&1; then
     TUNNEL_PROVIDER="cloudflared"
-    local cloudflared_bin
-    cloudflared_bin="$(command -v cloudflared 2>/dev/null || printf '%s' "$bundled_cloudflared")"
-    "$cloudflared_bin" tunnel --protocol http2 --url "http://localhost:$PORT" \
+    cloudflared tunnel --protocol http2 --url "http://localhost:$PORT" \
       >"$TUNNEL_LOG" 2>&1 &
   elif command -v ngrok >/dev/null 2>&1; then
     TUNNEL_PROVIDER="ngrok"

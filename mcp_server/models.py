@@ -607,11 +607,7 @@ class UpdateStepResult(BaseModel):
 
 class StepSpec(BaseModel):
     ref: str = Field(
-        description=(
-            "A unique temporary reference name for a user-created step in the bulk request "
-            "(e.g. 'approval_1', 'notify_mgr', 'reject_email'). Never use 'start' or '1'; "
-            "the trigger form start point is created by the server."
-        )
+        description="A unique temporary reference name for this step in the bulk request (e.g. 'approval_1', 'notify_mgr', 'reject_email')."
     )
     type: str = Field(
         description=(
@@ -642,14 +638,12 @@ class StepSpec(BaseModel):
             "use reserved role placeholders such as 'hr@workflow.invalid' or "
             "'manager@workflow.invalid' when no real address is provided; applicant/customer "
             "notifications should use the exact trigger form email field variable tag. "
-            "CRITICAL WARNING for dynamic variables in email subject/content: "
+            "CRITICAL WARNING for dynamic variables (e.g. in email content or approval tasks): "
             "NEVER use the question title/label wrapped in braces like '{Employee Name}'. "
             "ALWAYS use the exact 'name' property (unique name) from the fields/questions list "
             "returned by create_form_with_ai or get_workflow, like '{employeeName}'. "
             "When summarizing email content back to the user, refer to those dynamic fields by "
             "their visible labels instead of exposing raw Jotform tags such as '{q2_textbox0}'. "
-            "Task and approval taskDescription values must be plain text; never add form-field "
-            "tags there. "
             "For condition terms in build_workflow_bulk, prefer the trigger form's visible "
             "field label. Known field_id/qid/name values are also accepted; the bulk tool "
             "resolves them after creating/reading the trigger form and refuses ambiguous "
@@ -758,8 +752,10 @@ class BuildWorkflowBulkResult(BaseModel):
     current_updated_at: str | None = None
     warnings: list[str] = Field(default_factory=list)
     next_required_tool: str | None = Field(
-        "show_workflow",
-        description="Call show_workflow immediately after this tool to present the visual canvas to the user."
+        None,
+        description=(
+            "Set to show_workflow only after a successful write. Failed or preview-only calls leave it unset."
+        ),
     )
     error: str | None = None
     hint: str | None = None

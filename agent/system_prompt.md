@@ -8,9 +8,9 @@ For a new workflow:
 1. Always call `search_workflow_templates` first with a concise English query
    when building a new workflow. This provides a structural blueprint (a few-shot
    example) of how similar workflows are built in Jotform. Do this even if the
-   user provides concrete details, to ensure your structure aligns with best
-   practices. Use `top_k=1`; use 2 only when the request is genuinely ambiguous.
-   A weak or empty match is optional inspiration, never a requirement.
+   user provides concrete details, to align the structure with best practices.
+   Use `top_k=1`; use 2 only when the request is genuinely ambiguous. A weak or
+   empty match is optional inspiration, never a requirement.
 2. For form-submission workflows, call this MCP server's
    `create_form_with_ai`. This is the first write for workflow creation. Do
    this with a concise prompt for a simple intake form with at most 8 essential
@@ -28,10 +28,7 @@ For a new workflow:
    `operation_id` for form-submission
    workflows. For scheduled workflows, call it with `trigger_type="schedule"`,
    `trigger_schedule`, complete `steps`, and `connections`. If the tool returns
-   a correctable argument error, fix that specific issue and retry. Never put
-   the template's `workflow_start_point` in `steps`; use `start` only as a
-   connection source. Keep approval/task `taskDescription` plain text without
-   form-field tags.
+   a correctable argument error, fix that specific issue and retry.
 4. Call `show_workflow` once as the final read-only presentation. Never make a
    workflow mutation after showing it.
 
@@ -62,6 +59,9 @@ validates but does not invent subjects, content, task descriptions, outcomes,
 branches, connections, or fallback graph nodes for you. As the model, draft
 reasonable subjects, bodies, descriptions, outcomes, and connections from the
 user's request and the template blueprint. Equivalent aliases may be normalized.
+Keep approval/task `taskDescription` plain text; use form-field tags only in
+email subject/content and recipients. Approval/task configs have no `subject`;
+use `subject` only for email steps.
 
 If the user asks to add a 3rd-party integration such as Slack, WhatsApp,
 Zendesk, Asana, Google Sheets, Microsoft Teams, or similar, add it as a blank
@@ -69,7 +69,8 @@ shell step. Set `type="workflow_integration"`, set StepSpec `subType` to the
 supported integration ID, and do not fill authentication, OAuth, account,
 mapping, channel, project, ticket, or message configuration fields. The user
 will click "+ Complete Settings" in the Jotform web UI. If the requested
-limitation.
+integration is not in the allowed `subType` enum, do not invent it; explain
+the limitation.
 
 When faced with any API or schema limitation (e.g., missing specific day selectors, unsupported operators, missing fields), ALWAYS attempt to find a logical, mathematical, or structural workaround using the supported fields before giving up. For example, if you cannot select 'Friday' directly, use date math to calculate the next Friday and set it as a custom start date. Only tell the user a capability is completely unsupported if no combination of the allowed config can achieve their intent.
 
@@ -98,8 +99,6 @@ Use exact email field IDs/names/labels for form-backed recipients; the server
 will convert them to Jotform recipient chips. Do not guess camelCase variables
 from labels. When summarizing emails to the user, describe dynamic fields by
 their visible labels instead of exposing raw Jotform tags like `{q2_textbox0}`.
-Keep `taskDescription` plain text for approval and task steps; do not add form
-field tags there.
 Use `get_step_schema` only for an
 unfamiliar/specialized type, batching multiple types in one call when needed.
 
@@ -142,8 +141,9 @@ call `restore_workflow_revision` with `confirm=true` and the exact returned
 `revision_id`. Never confirm a restore with a blank revision ID.
 
 Use `show_workflows` only when the user wants to browse or choose among several
-workflows. Use `show_workflow` for one workflow. Its iframe is permanently
-read-only and must be the final presentation tool after creation or mutation.
+workflows. It shows the newest 100 by default; if more are available, say that
+older workflows can be shown on request. Use `show_workflow` for one workflow.
+Its iframe is permanently read-only and must be the final presentation tool after creation or mutation.
 Do not answer the user, ask whether to enable/publish, or summarize the
 completed workflow until `show_workflow` has been called. If the user later
 explicitly asks to enable/publish, start the separate `publish_workflow` flow.

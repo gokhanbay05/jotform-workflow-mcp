@@ -29,7 +29,7 @@ from mcp_server.tools.reading import (
 # Bump this whenever the embedded MCP UI or its CSP contract changes. Clients
 # cache `ui://` resources by URI, so reusing a version can leave an older host
 # unable to load a newly configured settings runtime.
-WORKFLOW_UI_RESOURCE_VERSION = 84
+WORKFLOW_UI_RESOURCE_VERSION = 94
 WORKFLOW_UI_RESOURCE_URI = (
     f"ui://jotform/workflows/v{WORKFLOW_UI_RESOURCE_VERSION}.html"
 )
@@ -210,15 +210,18 @@ def create_workflow_apps(client: JotformClient, *, html: str | None = None) -> A
         },
     )
     async def show_workflows(
-        limit: Annotated[int, Field(description="Page size, 1-100. Default 50.")] = 50,
-        offset: Annotated[int, Field(description="Zero-based page offset. Default 0.")] = 0,
+        limit: Annotated[int, Field(description="Page size, 1-100. Default 100 (the newest workflows).")] = 100,
+        offset: Annotated[int, Field(description="Zero-based page offset. Use a higher offset to show older workflows.")] = 0,
     ) -> WorkflowListUIResult:
         """
         Show the user's workflows in the interactive workflow list UI.
 
         Use this presentation tool when the user asks to see, browse, list,
-        or choose from their workflows. It reads Jotform directly; never build
-        its payload from assistant prose or remembered tool results.
+        or choose from their workflows. By default it shows the newest 100.
+        If more exist, tell the user that older workflows are available and
+        call it again with a higher offset when requested. It reads Jotform
+        directly; never build its payload from assistant prose or remembered
+        tool results.
         """
         return WorkflowListUIResult(data=read_workflow_list(client, limit=limit, offset=offset))
 
@@ -234,7 +237,7 @@ def create_workflow_apps(client: JotformClient, *, html: str | None = None) -> A
     async def show_workflow(
         workflow_id: Annotated[
             str,
-            Field(description="Workflow id returned by build_workflow_bulk or resolved from list_workflows."),
+            Field(description="Workflow id returned by build_workflow_bulk or resolved from show_workflows."),
         ],
     ) -> CallToolResult:
         """

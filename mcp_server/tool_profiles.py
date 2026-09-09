@@ -21,7 +21,6 @@ FAST_TOOLS = frozenset({
     # authoritative so the embedded UI never invokes hidden legacy tools.
     "get_node_settings_context",
     "save_node_settings",
-    "list_workflows",
     "get_workflow",
     "get_step_details",
     "list_workflow_revisions",

@@ -129,7 +129,7 @@ def _unconnected_branch_outcomes(elements: list[dict]) -> list[dict[str, str]]:
 def register(mcp: MCPServer, client: JotformClient) -> None:
     @mcp.tool()
     def delete_step(
-        workflow_id: Annotated[str, Field(description="From list_workflows.")],
+        workflow_id: Annotated[str, Field(description="From show_workflows or a previous workflow result.")],
         step_id: Annotated[str, Field(description="From get_workflow's steps list.")],
         confirm: Annotated[bool, Field(
             description=(
@@ -545,7 +545,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
 
     @mcp.tool()
     def restore_workflow_revision(
-        workflow_id: Annotated[str, Field(description="From list_workflows.")],
+        workflow_id: Annotated[str, Field(description="From show_workflows or a previous workflow result.")],
         revision_id: Annotated[str, Field(
             description=(
                 "For preview, may be empty to select the newest saved revision. "
@@ -674,7 +674,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
 
     @mcp.tool()
     def delete_workflow(
-        workflow_id: Annotated[str, Field(description="From list_workflows.")],
+        workflow_id: Annotated[str, Field(description="From show_workflows or a previous workflow result.")],
         confirm: Annotated[bool, Field(
             description="Leave false to preview. Only true after the user "
                         "explicitly says to proceed."
