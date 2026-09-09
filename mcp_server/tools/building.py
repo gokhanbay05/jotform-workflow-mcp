@@ -1432,9 +1432,16 @@ def _normalize_assignee_fields(
                 next_items.append(item)
                 continue
 
-            # 1. Match against form email questions using token/label/qid
+            # 1. Match valid email address string first (a real email is never a form field keyword)
+            clean_raw = raw.strip("{}").strip()
+            if EMAIL_RE.match(raw) or EMAIL_RE.match(clean_raw):
+                next_items.append(_fixed_email_reference(clean_raw if EMAIL_RE.match(clean_raw) else raw))
+                changed = True
+                continue
+
+            # 2. Match against form email questions using token/label/qid (only for non-email tokens)
             matched_qid = _question_id_by_token(email_questions, raw) or _question_id_by_token(questions, raw)
-            if not matched_qid and len(email_questions) == 1 and any(
+            if not matched_qid and "@" not in raw and len(email_questions) == 1 and any(
                 token in raw.lower() for token in ("email", "posta", "mail", "musteri", "müşteri", "submitter", "applicant")
             ):
                 matched_qid = next(iter(email_questions.keys()))
@@ -1454,13 +1461,6 @@ def _normalize_assignee_fields(
                     qid, question = match
             if question is not None:
                 next_items.append(_email_field_reference(qid, question, form_title))
-                changed = True
-                continue
-
-            # 2. Match valid email address string
-            clean_raw = raw.strip("{}").strip()
-            if EMAIL_RE.match(raw) or EMAIL_RE.match(clean_raw):
-                next_items.append(_fixed_email_reference(clean_raw if EMAIL_RE.match(clean_raw) else raw))
                 changed = True
                 continue
 
@@ -1633,9 +1633,15 @@ def _normalize_email_recipients(
             if not raw:
                 continue
 
-            # 1. Match against form email questions using token/label/qid
+            # 1. Match valid email address string first (a real email is never a form field keyword)
+            if EMAIL_RE.match(raw):
+                next_recipients.append(_fixed_email_reference(raw))
+                changed = True
+                continue
+
+            # 2. Match against form email questions using token/label/qid (only for non-email tokens)
             matched_qid = _question_id_by_token(email_questions, raw) or _question_id_by_token(all_questions, raw)
-            if not matched_qid and len(email_questions) == 1 and any(
+            if not matched_qid and "@" not in raw and len(email_questions) == 1 and any(
                 token in raw.lower() for token in ("email", "posta", "mail", "musteri", "müşteri", "submitter", "applicant")
             ):
                 matched_qid = next(iter(email_questions.keys()))
@@ -1645,12 +1651,6 @@ def _normalize_email_recipients(
                 next_recipients.append(_email_field_reference(matched_qid, q, form_title))
                 changed = True
                 used_question_ref = True
-                continue
-
-            # 2. Match valid email address string
-            if EMAIL_RE.match(raw):
-                next_recipients.append(_fixed_email_reference(raw))
-                changed = True
                 continue
 
             # 3. Unknown field-looking tokens must not be guessed.
@@ -1828,6 +1828,105 @@ def _config_from_update_tree_result(
             return {**saved_config, **data}
 
     return saved_config
+
+
+def save_step_settings(
+    client: JotformClient,
+    workflow_id: str,
+    step_id: str,
+    config: dict,
+    *,
+    intent: str = "",
+    reason: str = "",
+    audit_tool_name: str = "update_step",
+) -> UpdateStepResult:
+    """Validate and persist one step config for both model and widget tools."""
+    try:
+        current = client.get_element(workflow_id, step_id)
+    except JotformAPIError as e:
+        return UpdateStepResult(step_id=step_id, error=str(e))
+
+    step_type = current.get("type")
+    if not step_type:
+        return UpdateStepResult(step_id=step_id, error="Could not determine this step's type.")
+
+    try:
+        clean_config, warnings = tb.validate_config(step_type, config)
+    except tb.ValidationError as e:
+        return UpdateStepResult(step_id=step_id, error=str(e))
+
+    if not clean_config:
+        return UpdateStepResult(
+            step_id=step_id,
+            warnings=warnings,
+            error="Nothing to update — no valid fields in config.",
+        )
+
+    clean_config = _merge_outcome_updates(current, clean_config)
+
+    field_error, field_hint = _invalid_condition_field_message(
+        client, workflow_id, step_type, clean_config
+    )
+    if field_error:
+        return UpdateStepResult(
+            step_id=step_id,
+            warnings=warnings,
+            error=field_error,
+            hint=field_hint,
+        )
+
+    assignee_fields = ASSIGNEE_FIELDS_BY_STEP_TYPE.get(step_type, ())
+    if assignee_fields:
+        clean_config, assignee_hint, assignee_error = _normalize_assignee_fields(
+            client, workflow_id, clean_config, assignee_fields
+        )
+        if assignee_error:
+            return UpdateStepResult(
+                step_id=step_id,
+                warnings=warnings,
+                error=assignee_error,
+                hint="Use a valid fixed email address or choose a real email field from trigger_form_fields.",
+            )
+        if assignee_hint:
+            warnings.append(assignee_hint)
+
+    if step_type in ("workflow_send_email", "workflow_reminder_email"):
+        clean_config, recipient_hint, recipient_error = _normalize_email_config(
+            client, workflow_id, clean_config, apply_defaults=False
+        )
+        if recipient_error:
+            return UpdateStepResult(
+                step_id=step_id,
+                warnings=warnings,
+                error=recipient_error,
+                hint="Bind a trigger form first, then use a real email field or fixed email address.",
+            )
+        if recipient_hint:
+            warnings.append(recipient_hint)
+
+    try:
+        revision_log.capture_workflow_revision(
+            client,
+            workflow_id,
+            _revision_reason(f"before {audit_tool_name} {step_id}", intent, reason),
+            tool_name=audit_tool_name,
+        )
+        update_response = client.update_tree(
+            workflow_id, elements=[tb.build_element_update(step_id, clean_config)]
+        )
+    except JotformAPIError as e:
+        return UpdateStepResult(step_id=step_id, warnings=warnings, error=str(e))
+
+    return UpdateStepResult(
+        step_id=step_id,
+        config=_config_from_update_tree_result(
+            current,
+            clean_config,
+            update_response,
+            step_id,
+        ),
+        warnings=warnings,
+    )
 
 
 def _extract_ai_form_id(content: dict) -> str | None:
@@ -4113,88 +4212,11 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
         Does not move the step or change its connections — use connect_steps
         for wiring.
         """
-        try:
-            current = client.get_element(workflow_id, step_id)
-        except JotformAPIError as e:
-            return UpdateStepResult(step_id=step_id, error=str(e))
-
-        step_type = current.get("type")
-        if not step_type:
-            return UpdateStepResult(step_id=step_id, error="Could not determine this step's type.")
-
-        try:
-            clean_config, warnings = tb.validate_config(step_type, config)
-        except tb.ValidationError as e:
-            return UpdateStepResult(step_id=step_id, error=str(e))
-
-        if not clean_config:
-            return UpdateStepResult(
-                step_id=step_id, warnings=warnings,
-                error="Nothing to update — no valid fields in config.",
-            )
-
-        clean_config = _merge_outcome_updates(current, clean_config)
-
-        field_error, field_hint = _invalid_condition_field_message(
-            client, workflow_id, step_type, clean_config
-        )
-        if field_error:
-            return UpdateStepResult(
-                step_id=step_id,
-                warnings=warnings,
-                error=field_error,
-                hint=field_hint,
-            )
-
-        assignee_fields = ASSIGNEE_FIELDS_BY_STEP_TYPE.get(step_type, ())
-        if assignee_fields:
-            clean_config, assignee_hint, assignee_error = _normalize_assignee_fields(
-                client, workflow_id, clean_config, assignee_fields
-            )
-            if assignee_error:
-                return UpdateStepResult(
-                    step_id=step_id,
-                    warnings=warnings,
-                    error=assignee_error,
-                    hint="Use a valid fixed email address or choose a real email field from trigger_form_fields.",
-                )
-            if assignee_hint:
-                warnings.append(assignee_hint)
-
-        if step_type in ("workflow_send_email", "workflow_reminder_email"):
-            clean_config, recipient_hint, recipient_error = _normalize_email_config(
-                client, workflow_id, clean_config, apply_defaults=False
-            )
-            if recipient_error:
-                return UpdateStepResult(
-                    step_id=step_id,
-                    warnings=warnings,
-                    error=recipient_error,
-                    hint="Bind a trigger form first, then use a real email field or fixed email address.",
-                )
-            if recipient_hint:
-                warnings.append(recipient_hint)
-
-        try:
-            revision_log.capture_workflow_revision(
-                client,
-                workflow_id,
-                _revision_reason(f"before update_step {step_id}", intent, reason),
-                tool_name="update_step",
-            )
-            update_response = client.update_tree(
-                workflow_id, elements=[tb.build_element_update(step_id, clean_config)]
-            )
-        except JotformAPIError as e:
-            return UpdateStepResult(step_id=step_id, warnings=warnings, error=str(e))
-
-        return UpdateStepResult(
-            step_id=step_id,
-            config=_config_from_update_tree_result(
-                current,
-                clean_config,
-                update_response,
-                step_id,
-            ),
-            warnings=warnings,
+        return save_step_settings(
+            client,
+            workflow_id,
+            step_id,
+            config,
+            intent=intent,
+            reason=reason,
         )

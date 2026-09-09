@@ -44,7 +44,7 @@ actionable from inside a conversation with an AI assistant (Claude,
 ChatGPT), over MCP (Model Context Protocol), without leaving the
 conversation. The scope, tool design, and interface were left open by the
 brief on purpose — working that out was the assignment. This repo is one
-MCP server exposing 14 tools across four layers (discovery, reading,
+MCP server exposing 18 tools across four layers (discovery, reading,
 building, risky), built entirely against Jotform's **public**,
 documented-and-undocumented API surface — never the internal BFF that
 powers Jotform's own builder UI, which is session-gated and off-limits per
@@ -1341,7 +1341,7 @@ enforce or even know about the layer boundaries.
 
 ## `tests/` — what's actually proven
 
-37 tests total, run with `python -m pytest tests/ -q`, no network, no API
+271 tests total, run with `python -m pytest tests/ -q`, no network, no API
 key, complete in under two seconds.
 
 **`tests/test_graph.py`** (13 tests) — fixtures include the real 18-step
@@ -1379,7 +1379,7 @@ what it found.
 
 | Script | Checks | Found |
 |---|---|---|
-| `smoke_test.py` | All 14 tools, happy path, in ~10 seconds | Fast health check to run after any change |
+| `smoke_test.py` | Model-facing tools, happy path, in ~10 seconds | Fast health check to run after any change |
 | `inspect_links.py` | Raw fields on every link object | `labels` always empty; `fromPortName` is canvas geometry, not branch identity |
 | `inspect_outcomes.py` | Whether `/combined` includes `outcomes` on elements | Yes — no extra call needed |
 | `test_link_ports.py` / `test_link_ports2.py` | What fields a link write actually requires, and whether values are validated | `points` needs non-empty content (ignored); ports are unvalidated and self-correct; `type` is unvalidated and **not** corrected |
@@ -1456,10 +1456,11 @@ way":
 ## Running the server
 
 ```bash
+python3 -m venv .venv
+./.venv/bin/pip install -r requirements.txt
 cp .env.example .env      # fill in JOTFORM_API_KEY
-pip install -r requirements.txt
-python -m pytest tests/ -q          # 37 tests, no network, should all pass
-python -m mcp_server.server         # boots the stdio server
+./.venv/bin/python -m pytest tests/ -q  # 271 tests, no network, should all pass
+./.venv/bin/python -m mcp_server.server # boots the stdio server
 ```
 
 Or via the launcher (handles working-directory issues MCP clients are
@@ -1492,21 +1493,52 @@ agent instructions require `show_workflow` exactly once after the final
 verified create/update state, and `show_workflows` when the user asks to
 browse workflows.
 
-The packaged frontend is committed at
-`mcp_server/assets/workflow-mcp-ui.html`. To rebuild it from the sibling
-frontend workspace:
+The repository contains both browser artifacts required by the embedded app:
+
+- `mcp_server/assets/workflow-mcp-ui.html` is the self-contained MCP App.
+- `mcp_server/assets/workflow-settings-runtime.js` is the settings UMD used by
+  editable node drawers.
+
+Because both generated files are committed, a teammate can clone this
+repository and run it without checking out the frontend repository or having
+access to Jotform RDS. To rebuild both artifacts from a sibling frontend
+workspace, run:
 
 ```bash
-cd ../frontend
-pnpm --filter @jotforminc/workflow-mcp-ui build:mcp
-cp packages/apps/workflow-mcp-ui/build/mcp-app.html \
-  ../jotform-workflow-mcp/mcp_server/assets/workflow-mcp-ui.html
+./scripts/build_ui_assets.sh
 ```
 
-For another deployment layout, set
-`WORKFLOW_MCP_UI_HTML_PATH=/absolute/path/to/mcp-app.html`. If no artifact is
-available, the MCP server still starts and returns structured tool data, but
-the iframe displays a diagnostic page instead of the workflow preview.
+The script expects `../frontend` by default. For another checkout layout, use
+`FRONTEND_ROOT=/absolute/path/to/frontend ./scripts/build_ui_assets.sh`.
+`WORKFLOW_MCP_UI_HTML_PATH` and `WORKFLOW_SETTINGS_RUNTIME_PATH` can override
+the two packaged files for local development.
+
+For a remote ChatGPT or Claude connector, start the shareable development
+server with:
+
+```bash
+python3 -m venv .venv
+./.venv/bin/pip install -r requirements.txt
+cp .env.example .env      # once; add your own JOTFORM_API_KEY
+./run_with_tunnel.sh
+```
+
+The launcher selects `cloudflared`, then `ngrok`, then `localhost.run`, prints
+the public `<tunnel>/mcp` connector URL, and serves the settings runtime from
+`<tunnel>/assets/workflow-settings-runtime.js`. It also sets the runtime URL
+before the MCP App is created, which keeps its CSP and payload in sync. Keep
+that terminal open while using the connector. No RDS URL is required.
+
+This tunnel mode is for controlled development only: it exposes an MCP server
+that acts with the `JOTFORM_API_KEY` in that machine's `.env`. Use a personal
+test account/key, do not share the random tunnel URL publicly, and stop the
+launcher when the test session ends.
+
+When running `api.py` through another HTTPS deployment, set
+`WORKFLOW_SETTINGS_RUNTIME_URL` to that deployment's public runtime route.
+The URL must use HTTPS because it is loaded by the sandboxed MCP App. If the
+UI artifact is unavailable, the MCP server still returns structured tool data
+and the iframe displays a diagnostic page instead of the workflow preview.
 
 To connect a local Claude Desktop: add an entry to
 `claude_desktop_config.json` pointing `command` at `run_server.sh`'s
@@ -1517,12 +1549,9 @@ doesn't work once the server isn't yours alone to run).
 
 ## Current status
 
-14 tools across 4 layers. 12 are fully confirmed end-to-end with
-read-back verification. 1 (`publish_workflow`) works but its best
-confirmation signal is still an open question. 1 known, confirmed,
-permanent limitation (`create_workflow`'s `trigger_form_id` — the
-underlying API call is a no-op; the tool now detects and reports this
-rather than claiming false success).
+18 model-facing tools across 4 layers, including the two resource-bound
+callbacks used by the embedded node-settings UI. The checked-in schema is
+generated from this live surface and covered by the test suite.
 
 No open item currently blocks using the server. Remaining gaps
 (schema/UI-name coverage for a handful of step types, custom-named

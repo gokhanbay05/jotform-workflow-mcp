@@ -403,6 +403,17 @@ class FormFieldList(BaseModel):
     error: str | None = None
 
 
+class NodeSettingsContextResult(BaseModel):
+    """One widget-safe read for a node editor's persisted state and fields."""
+
+    workflow_id: str | None = None
+    step_id: str | None = None
+    config: dict | None = None
+    form_fields: list[FormField] = Field(default_factory=list)
+    error: str | None = None
+    warning: str | None = None
+
+
 class StepTypeSummary(BaseModel):
     step_type: str
     category: str
@@ -767,6 +778,13 @@ class DeleteStepResult(BaseModel):
     hint: str | None = None
 
 
+class PublishWorkflowHealthIssue(BaseModel):
+    """Structured advisory finding shown before a workflow is enabled."""
+    code: str
+    title: str
+    items: list[str] = Field(default_factory=list)
+
+
 class PublishWorkflowResult(BaseModel):
     workflow_id: str | None = None
     workflow_url: str | None = None
@@ -779,7 +797,14 @@ class PublishWorkflowResult(BaseModel):
     health_warnings: list[str] = Field(
         default_factory=list,
         description="Structural problems in the workflow as it stands — "
-                     "reported alongside the publish result"
+        "reported alongside the publish result"
+    )
+    health_issues: list[PublishWorkflowHealthIssue] = Field(
+        default_factory=list,
+        description=(
+            "Structured, display-ready health findings. health_warnings remains "
+            "for existing model clients that consume the legacy text list."
+        ),
     )
     published: bool = False
     error: str | None = None

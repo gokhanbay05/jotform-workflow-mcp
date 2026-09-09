@@ -104,7 +104,7 @@ def _server():
 
 
 def test_ui_resource_is_registered_with_mcp_app_mime_type():
-    assert WORKFLOW_UI_RESOURCE_URI == "ui://jotform/workflows/v53.html"
+    assert WORKFLOW_UI_RESOURCE_URI == "ui://jotform/workflows/v93.html"
 
     with patch.dict("os.environ", {"WORKFLOW_SETTINGS_RUNTIME_URL": ""}):
         server = _server()
@@ -255,3 +255,44 @@ def test_non_https_settings_runtime_is_ignored():
 
     result = asyncio.run(server.call_tool("show_workflow", {"workflow_id": "wf-1"}))
     assert result.structured_content["data"]["settings_runtime_url"] is None
+
+
+def test_normalize_assignee_preserves_literal_emails_containing_mail_keyword():
+    from mcp_server.tools.building import _normalize_assignee_fields, _normalize_email_recipients
+
+    trigger_context = ("form-1", {"3": {"qid": "3", "name": "email", "text": "E-posta", "type": "control_email"}}, None)
+
+    # User adds both the form field E-posta and a literal email address like deneme@mail.com
+    config = {
+        "assignee": [
+            {"isQuestion": True, "value": "{email}", "text": "E-posta"},
+            {"value": "deneme@mail.com", "text": "deneme@mail.com"},
+        ]
+    }
+    normalized, hint, error = _normalize_assignee_fields(
+        None, "wf-1", config, ("assignee",), trigger_context=trigger_context
+    )
+    assert error is None
+    assignees = normalized["assignee"]
+    assert len(assignees) == 2
+    assert assignees[0]["isQuestion"] is True
+    assert assignees[0]["value"] == "{email}"
+    assert assignees[1]["isQuestion"] is False
+    assert assignees[1]["value"] == "deneme@mail.com"
+
+    # Test email node 'to' field as well
+    email_config = {
+        "to": [
+            {"isQuestion": True, "value": "{email}", "text": "E-posta"},
+            {"value": "deneme@mail.com", "text": "deneme@mail.com"},
+        ]
+    }
+    normalized_email, _, err_email = _normalize_email_recipients(
+        None, "wf-1", email_config, trigger_context=trigger_context
+    )
+    assert err_email is None
+    to_list = normalized_email["to"]
+    assert len(to_list) == 2
+    assert to_list[0]["isQuestion"] is True
+    assert to_list[1]["isQuestion"] is False
+    assert to_list[1]["value"] == "deneme@mail.com"

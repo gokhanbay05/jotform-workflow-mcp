@@ -2,6 +2,8 @@ import asyncio
 
 import httpx
 
+from api import app as tunnel_app
+from mcp_server.http_assets import WORKFLOW_SETTINGS_RUNTIME_ROUTE
 from server_http import app
 
 
@@ -37,3 +39,32 @@ def test_streamable_http_connector_paths_initialize():
         assert response.headers["content-type"].startswith("text/event-stream")
         assert response.headers["mcp-session-id"]
         assert '"result"' in response.text
+
+
+def test_settings_runtime_is_served_as_a_same_origin_browser_asset(
+    monkeypatch,
+    tmp_path,
+):
+    runtime = tmp_path / "workflow-settings-runtime.js"
+    runtime.write_text("window.WorkflowSettings = {};", encoding="utf-8")
+    monkeypatch.setenv("WORKFLOW_SETTINGS_RUNTIME_PATH", str(runtime))
+
+    async def fetch_runtime(candidate_app):
+        transport = httpx.ASGITransport(app=candidate_app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.get(WORKFLOW_SETTINGS_RUNTIME_ROUTE)
+
+    async def fetch_all_runtimes():
+        return await asyncio.gather(
+            fetch_runtime(app),
+            fetch_runtime(tunnel_app),
+        )
+
+    responses = asyncio.run(fetch_all_runtimes())
+
+    for response in responses:
+        assert response.status_code == 200
+        assert response.text == "window.WorkflowSettings = {};"
+        assert response.headers["content-type"].startswith("application/javascript")
+        assert response.headers["cache-control"] == "no-store"
+        assert response.headers["x-content-type-options"] == "nosniff"

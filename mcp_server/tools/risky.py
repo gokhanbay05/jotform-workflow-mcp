@@ -11,7 +11,7 @@ from mcp_server import tree_builder as tb
 from mcp_server.jotform_client import JotformAPIError, JotformClient, workflow_revision_id
 from mcp_server.models import (
     DeleteStepResult, DeleteWorkflowResult, PublishWorkflowResult,
-    RestoreWorkflowRevisionResult,
+    PublishWorkflowHealthIssue, RestoreWorkflowRevisionResult,
 )
 
 
@@ -92,8 +92,23 @@ def _restore_result_from_revision(
     )
 
 
-def _unconnected_branch_outcomes(elements: list[dict]) -> list[str]:
-    unconnected: list[str] = []
+def _element_label(element: dict) -> str:
+    return str(element.get("name") or schema_registry.default_label(element.get("type")))
+
+
+def _step_issue_items(elements: list[dict], step_ids: list[object]) -> list[str]:
+    elements_by_id = {str(element.get("element_id")): element for element in elements}
+    items = []
+    for step_id in step_ids:
+        normalized_id = str(step_id)
+        element = elements_by_id.get(normalized_id)
+        label = _element_label(element) if element else "Unknown step"
+        items.append(f"{label} (step {normalized_id})")
+    return items
+
+
+def _unconnected_branch_outcomes(elements: list[dict]) -> list[dict[str, str]]:
+    unconnected: list[dict[str, str]] = []
     for element in elements:
         if element.get("type") not in schema_registry.BRANCHING_TYPES:
             continue
@@ -102,8 +117,12 @@ def _unconnected_branch_outcomes(elements: list[dict]) -> list[str]:
             if not isinstance(outcome, dict):
                 continue
             if outcome.get("linkID") in (None, 0, "0", ""):
-                label = tb.outcome_label(outcome) or outcome.get("outcomeID")
-                unconnected.append(f"step {step_id} {label}")
+                outcome_label = str(tb.outcome_label(outcome) or outcome.get("outcomeID") or "Unnamed outcome")
+                unconnected.append({
+                    "step_id": str(step_id),
+                    "step_name": _element_label(element),
+                    "outcome_name": outcome_label,
+                })
     return unconnected
 
 
@@ -343,32 +362,71 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
         current_revision_id = workflow_revision_id(combined)
 
         warnings = []
+        health_issues: list[PublishWorkflowHealthIssue] = []
+
+        def add_health_issue(code: str, title: str, legacy_warning: str, items: list[str]) -> None:
+            warnings.append(legacy_warning)
+            health_issues.append(PublishWorkflowHealthIssue(code=code, title=title, items=items))
+
         if health["unreachable_steps"]:
-            warnings.append(f"{len(health['unreachable_steps'])} step(s) can never run: "
-                           f"{health['unreachable_steps']}")
+            step_ids = health["unreachable_steps"]
+            add_health_issue(
+                "unreachable_steps",
+                "Steps that can never run",
+                f"{len(step_ids)} step(s) can never run: {step_ids}",
+                _step_issue_items(elements, step_ids),
+            )
         if health["dead_end_steps"]:
-            warnings.append(f"{len(health['dead_end_steps'])} step(s) lead nowhere: "
-                           f"{health['dead_end_steps']}")
+            step_ids = health["dead_end_steps"]
+            add_health_issue(
+                "dead_end_steps",
+                "Steps that lead nowhere",
+                f"{len(step_ids)} step(s) lead nowhere: {step_ids}",
+                _step_issue_items(elements, step_ids),
+            )
         if health["dangling_links"]:
-            warnings.append(f"broken link(s): {health['dangling_links']}")
+            links_with_issues = health["dangling_links"]
+            add_health_issue(
+                "dangling_links",
+                "Broken links",
+                f"broken link(s): {links_with_issues}",
+                [str(link) for link in links_with_issues],
+            )
         unconnected_branches = _unconnected_branch_outcomes(elements)
         if unconnected_branches:
-            warnings.append(f"unconnected branch outcome(s): {unconnected_branches}")
+            legacy_items = [f"step {item['step_id']} {item['outcome_name']}" for item in unconnected_branches]
+            add_health_issue(
+                "unconnected_branch_outcomes",
+                "Unconnected branch outcomes",
+                f"unconnected branch outcome(s): {legacy_items}",
+                [f"{item['step_name']} (step {item['step_id']}) — {item['outcome_name']}" for item in unconnected_branches],
+            )
         if branch_health["unlabelled_branching_steps"]:
-            warnings.append(
-                "unlabelled branching link(s): "
-                f"{branch_health['unlabelled_branching_steps']}"
+            branch_steps = branch_health["unlabelled_branching_steps"]
+            add_health_issue(
+                "unlabelled_branching_links",
+                "Unlabelled branching links",
+                f"unlabelled branching link(s): {branch_steps}",
+                [str(step) for step in branch_steps],
             )
         if branch_health["invalid_branch_links"]:
-            warnings.append(
-                f"invalid branch mapping(s): {branch_health['invalid_branch_links']}"
+            invalid_links = branch_health["invalid_branch_links"]
+            add_health_issue(
+                "invalid_branch_links",
+                "Invalid branch mappings",
+                f"invalid branch mapping(s): {invalid_links}",
+                [str(link) for link in invalid_links],
             )
         placeholders = _draft_recipient_placeholders(elements)
         if placeholders:
-            warnings.append(
-                "draft recipient placeholder(s) present before enabling: "
-                + ", ".join(placeholders)
+            add_health_issue(
+                "draft_recipient_placeholders",
+                "Draft recipient placeholders",
+                "draft recipient placeholder(s) present before enabling: " + ", ".join(placeholders),
+                placeholders,
             )
+
+        health_fields = {"health_warnings": warnings, "health_issues": health_issues}
 
         if current_status == "ENABLED":
             return PublishWorkflowResult(
@@ -376,7 +434,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
                 workflow_url=_workflow_url(workflow_id),
                 current_status=current_status,
                 revision_id=current_revision_id,
-                health_warnings=warnings,
+                **health_fields,
                 published=True,
                 hint="Workflow is already ENABLED; no status change was made.",
             )
@@ -388,7 +446,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
                 current_status=current_status,
                 revision_id=current_revision_id,
                 needs_confirmation=True,
-                health_warnings=warnings,
+                **health_fields,
                 hint=(
                     "Show the current DISABLED status and advisory warnings to the user. "
                     "Call publish_workflow again with confirm=true and expected_revision_id set "
@@ -402,7 +460,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
                 workflow_url=_workflow_url(workflow_id),
                 current_status=current_status,
                 revision_id=current_revision_id,
-                health_warnings=warnings,
+                **health_fields,
                 error="expected_revision_id is required when confirm=true.",
                 hint="Preview again with confirm=false and echo its revision_id exactly.",
             )
@@ -412,7 +470,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
                 workflow_url=_workflow_url(workflow_id),
                 current_status=current_status,
                 revision_id=current_revision_id,
-                health_warnings=warnings,
+                **health_fields,
                 error="Workflow changed after the publish preview; it was not enabled.",
                 hint="Preview again and ask for confirmation against the new revision_id.",
             )
@@ -422,7 +480,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
                 workflow_url=_workflow_url(workflow_id),
                 current_status=current_status,
                 revision_id=current_revision_id,
-                health_warnings=warnings,
+                **health_fields,
                 needs_confirmation=True,
                 error="Draft recipient placeholders need explicit override before publishing.",
                 hint=(
@@ -445,7 +503,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
                 workflow_id=workflow_id,
                 workflow_url=_workflow_url(workflow_id),
                 current_status=current_status,
-                health_warnings=warnings,
+                **health_fields,
                 error=str(e),
             )
 
@@ -463,7 +521,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
                     workflow_id=workflow_id,
                     workflow_url=_workflow_url(workflow_id),
                     current_status=current_status,
-                    health_warnings=warnings,
+                    **health_fields,
                     error=f"Enable request completed but status verification failed: {e}",
                 )
         if enabled_status != "ENABLED":
@@ -471,7 +529,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
                 workflow_id=workflow_id,
                 workflow_url=_workflow_url(workflow_id),
                 current_status=enabled_status or current_status,
-                health_warnings=warnings,
+                **health_fields,
                 error="Workflow enable request did not persist as ENABLED.",
             )
 
@@ -480,7 +538,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
             workflow_url=_workflow_url(workflow_id),
             current_status="ENABLED",
             revision_id=current_revision_id,
-            health_warnings=warnings,
+            **health_fields,
             published=True,
         )
 

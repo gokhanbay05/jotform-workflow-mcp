@@ -1,5 +1,288 @@
 [
   {
+    "name": "get_node_settings_context",
+    "description": "Return one node's current config and its form-field token choices for the UI.",
+    "input_schema": {
+      "properties": {
+        "workflow_id": {
+          "description": "Workflow ID containing the selected node.",
+          "title": "Workflow Id",
+          "type": "string"
+        },
+        "step_id": {
+          "description": "Selected workflow element ID.",
+          "title": "Step Id",
+          "type": "string"
+        },
+        "form_id": {
+          "default": "",
+          "description": "Optional trigger form ID used for field tokens.",
+          "title": "Form Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workflow_id",
+        "step_id"
+      ],
+      "title": "get_node_settings_contextArguments",
+      "type": "object"
+    },
+    "output_schema": {
+      "$defs": {
+        "FormField": {
+          "properties": {
+            "field_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Exact Jotform question ID used in workflow field references.",
+              "title": "Field Id"
+            },
+            "name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Exact Jotform unique question name used inside dynamic variables, for example {q3_email1}. Prefer this over guessing camelCase labels.",
+              "title": "Name"
+            },
+            "label": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Exact visible form-field label.",
+              "title": "Label"
+            },
+            "type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Exact Jotform question/control type.",
+              "title": "Type"
+            },
+            "required": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Whether the form field is required, as returned by Jotform.",
+              "title": "Required"
+            },
+            "options": {
+              "description": "Exact allowed option texts for dropdown/radio/choice fields",
+              "items": {
+                "type": "string"
+              },
+              "title": "Options",
+              "type": "array"
+            }
+          },
+          "title": "FormField",
+          "type": "object"
+        }
+      },
+      "description": "One widget-safe read for a node editor's persisted state and fields.",
+      "properties": {
+        "workflow_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Workflow Id"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "config": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config"
+        },
+        "form_fields": {
+          "items": {
+            "$ref": "#/$defs/FormField"
+          },
+          "title": "Form Fields",
+          "type": "array"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "warning": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Warning"
+        }
+      },
+      "title": "NodeSettingsContextResult",
+      "type": "object"
+    }
+  },
+  {
+    "name": "save_node_settings",
+    "description": "Persist one node edit through the same updateTree path as update_step.",
+    "input_schema": {
+      "properties": {
+        "workflow_id": {
+          "description": "Workflow ID containing the selected node.",
+          "title": "Workflow Id",
+          "type": "string"
+        },
+        "step_id": {
+          "description": "Selected workflow element ID.",
+          "title": "Step Id",
+          "type": "string"
+        },
+        "config": {
+          "additionalProperties": true,
+          "description": "Only the node settings changed by the user.",
+          "title": "Config",
+          "type": "object"
+        }
+      },
+      "required": [
+        "workflow_id",
+        "step_id",
+        "config"
+      ],
+      "title": "save_node_settingsArguments",
+      "type": "object"
+    },
+    "output_schema": {
+      "properties": {
+        "step_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "config": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Saved element config derived from the updateTree result.",
+          "title": "Config"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "hint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hint"
+        }
+      },
+      "title": "UpdateStepResult",
+      "type": "object"
+    }
+  },
+  {
     "name": "show_workflows",
     "description": "\n        Show the user's workflows in the interactive workflow list UI.\n\n        Use this presentation tool when the user asks to see, browse, list,\n        or choose from their workflows. It reads Jotform directly; never build\n        its payload from assistant prose or remembered tool results.\n        ",
     "input_schema": {
@@ -2885,6 +3168,34 @@
       "type": "object"
     },
     "output_schema": {
+      "$defs": {
+        "PublishWorkflowHealthIssue": {
+          "description": "Structured advisory finding shown before a workflow is enabled.",
+          "properties": {
+            "code": {
+              "title": "Code",
+              "type": "string"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            },
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Items",
+              "type": "array"
+            }
+          },
+          "required": [
+            "code",
+            "title"
+          ],
+          "title": "PublishWorkflowHealthIssue",
+          "type": "object"
+        }
+      },
       "properties": {
         "workflow_id": {
           "anyOf": [
@@ -2951,6 +3262,14 @@
             "type": "string"
           },
           "title": "Health Warnings",
+          "type": "array"
+        },
+        "health_issues": {
+          "description": "Structured, display-ready health findings. health_warnings remains for existing model clients that consume the legacy text list.",
+          "items": {
+            "$ref": "#/$defs/PublishWorkflowHealthIssue"
+          },
+          "title": "Health Issues",
           "type": "array"
         },
         "published": {
