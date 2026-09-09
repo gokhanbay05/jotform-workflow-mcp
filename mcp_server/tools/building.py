@@ -19,6 +19,7 @@ import re
 import unicodedata
 from copy import deepcopy
 from datetime import datetime, time, timedelta, timezone
+from time import sleep
 from typing import Annotated
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -26,7 +27,15 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from mcp.server import MCPServer
 from pydantic import Field
 
-from mcp_server import audit_log, revision_log, schema_registry, sync_state, tree_builder as tb, workflow_inspector
+from mcp_server import (
+    audit_log,
+    revision_log,
+    schema_registry,
+    sync_state,
+    template_search_state,
+    tree_builder as tb,
+    workflow_inspector,
+)
 from mcp_server.integrations import supported_integration_subtypes_text
 from mcp_server.jotform_client import (
     ConflictError,
@@ -958,6 +967,13 @@ def _normalize_step_config_aliases(step_type: str, config: dict) -> tuple[dict, 
         move("task_details", "taskDescription")
         move("body", "taskDescription")
 
+    if canonical_type in ("workflow_approval", "workflow_assign_task", "workflow_assign"):
+        if "subject" in normalized:
+            normalized.pop("subject")
+            warnings.append(
+                f"unsupported field 'subject' ignored for {canonical_type}; use taskDescription"
+            )
+
     return normalized, warnings
 
 
@@ -1337,6 +1353,16 @@ def _normalize_condition_field_tokens(
 
     def normalize_term(term: dict, path: str) -> str | None:
         raw_field = term.get("field")
+        if not str(raw_field or "").strip():
+            for alias in (
+                "fieldName", "field_name", "fieldId", "field_id",
+                "questionId", "question_id",
+            ):
+                if str(term.get(alias) or "").strip():
+                    raw_field = term.pop(alias)
+                    term["field"] = raw_field
+                    changed.append(f"{path}.field alias '{alias}' normalized")
+                    break
         resolved = resolve(raw_field)
         if resolved:
             if str(raw_field) != resolved:
@@ -1851,7 +1877,9 @@ def save_step_settings(
         return UpdateStepResult(step_id=step_id, error="Could not determine this step's type.")
 
     try:
-        clean_config, warnings = tb.validate_config(step_type, config)
+        clean_config, warnings = tb.validate_config(
+            step_type, config, sanitize_task_descriptions=True
+        )
     except tb.ValidationError as e:
         return UpdateStepResult(step_id=step_id, error=str(e))
 
@@ -1989,18 +2017,29 @@ def _bind_and_verify_trigger(
             trigger_form_url=_form_url(trigger_form_id),
             error=f"Workflow created, but setting trigger form failed: {e}",
         )
-    try:
-        start = client.get_element(workflow_id, 1)
-    except JotformAPIError as e:
+    start = None
+    last_error: JotformAPIError | None = None
+    for attempt, delay in enumerate((0.0, 0.35, 0.75, 1.25)):
+        if delay:
+            sleep(delay)
+        try:
+            start = client.get_element(workflow_id, 1)
+        except JotformAPIError as e:
+            last_error = e
+            continue
+        if str(start.get("resourceID")) == str(trigger_form_id):
+            return None
+
+    if start is None and last_error is not None:
         return CreateWorkflowResult(
             workflow_id=str(workflow_id), title=title,
             workflow_url=_workflow_url(str(workflow_id)),
             trigger_form_id=trigger_form_id,
             trigger_form_url=_form_url(trigger_form_id),
-            error=f"Workflow created, trigger form set, but could not verify: {e}",
+            error=f"Workflow created, trigger form set, but could not verify: {last_error}",
         )
 
-    if str(start.get("resourceID")) != str(trigger_form_id):
+    if not isinstance(start, dict) or str(start.get("resourceID")) != str(trigger_form_id):
         return CreateWorkflowResult(
             workflow_id=str(workflow_id), title=title,
             workflow_url=_workflow_url(str(workflow_id)),
@@ -2054,7 +2093,8 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
         prompt: Annotated[str, Field(
             description=(
                 "Call this only after search_workflow_templates when building a "
-                "new workflow that needs an AI-generated form: a trigger form for "
+                "new workflow that needs an AI-generated "
+                "form: a trigger form for "
                 "form-submission workflows, or an assigned form for scheduled "
                 "workflows. This is the first write, not the first tool call. Use "
                 "this MCP workflow tool for that write. Do not use external "
@@ -2096,14 +2136,19 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
         chain. It returns form_id plus the exact field_id, name, label, type,
         required, and options values for the subsequent build_workflow_bulk call. Use
         field name values inside email subject/content variables and recipient
-        field references. No
-        separate form-field lookup is needed. This form-only result is not
-        complete when the user requested a workflow; if template search has not
-        already happened, call search_workflow_templates before build_workflow_bulk.
+        field references. No separate form-field lookup is needed. This
+        form-only result is not complete when the user requested a workflow;
+        if template search has not already happened, call
+        search_workflow_templates before build_workflow_bulk.
         """
         operation_id = str(operation_id or "").strip()
         if len(operation_id) > 120:
             return CreateAIFormResult(error="operation_id must be 120 characters or fewer.")
+        if not template_search_state.template_search_completed():
+            return CreateAIFormResult(
+                error="Template search is required before creating a workflow form.",
+                hint="Call search_workflow_templates with a concise English workflow query, then retry create_form_with_ai.",
+            )
         try:
             create_kwargs = {"form_type": form_type, "language": language}
             if operation_id:
@@ -2115,6 +2160,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
         form_id = _extract_ai_form_id(content)
         if not form_id:
             return CreateAIFormResult(error=f"No form id in AI form response: {content!r}")
+        template_search_state.mark_template_backed_form(form_id)
 
         questions = content.get("questions") if isinstance(content.get("questions"), dict) else {}
         title = _extract_ai_form_title(content, questions)
@@ -2132,8 +2178,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
             fields=form_fields_from_questions(questions),
             next_required_tool="build_workflow_bulk",
             hint=(
-                "Workflow request is not complete yet. Use the already retrieved template blueprint "
-                "when choosing steps and connections. For a form-submission workflow, next call "
+                "Workflow request is not complete yet. Use the retrieved template blueprint when choosing steps and connections. For a form-submission workflow, next call "
                 f"build_workflow_bulk(title=..., trigger_form_id='{form_id}', steps=[...], connections=[...]). "
                 "The bulk tool will read and validate the form fields again before creating the workflow. "
                 "For a scheduled workflow that assigns this form after the schedule starts, next call "
@@ -2414,9 +2459,15 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
         """
         Create or mutate a workflow graph with one final updateTree write.
 
-        New form-submission flow: search_workflow_templates -> create_form_with_ai -> build_workflow_bulk -> show_workflow.
-        New scheduled flow: search_workflow_templates -> build_workflow_bulk(trigger_type="schedule", trigger_schedule=...) -> show_workflow.
-        New scheduled assigned-form flow: search_workflow_templates -> create_form_with_ai -> build_workflow_bulk(trigger_type="schedule", trigger_schedule=..., workflow_assign_form.formID=...) -> show_workflow.
+        New form-submission flow: search_workflow_templates ->
+        create_form_with_ai -> build_workflow_bulk
+        -> show_workflow.
+        New scheduled flow: search_workflow_templates ->
+        build_workflow_bulk(trigger_type="schedule", trigger_schedule=...) ->
+        show_workflow.
+        New scheduled assigned-form flow: search_workflow_templates ->
+        then create_form_with_ai -> build_workflow_bulk(trigger_type="schedule",
+        trigger_schedule=..., workflow_assign_form.formID=...) -> show_workflow.
         Do not use external Jotform form plugins/tools for the AI trigger form.
         Existing workflow flow: get_workflow -> build_workflow_bulk -> show_workflow.
         Use step_updates for existing configuration edits and steps for new nodes.
@@ -2428,7 +2479,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
         message configuration fields. The user completes settings in Jotform UI.
         Missing content/subject/body/outcome config is an error; the server validates
         but does not invent email content or fallback graph nodes for you. Draft
-        reasonable content from the user's request and template blueprint. For new draft workflows,
+        reasonable content from the user's request and the template blueprint. For new draft workflows,
         missing staff approvers/assignees are filled with reserved role placeholders
         such as hr@workflow.invalid or manager@workflow.invalid. Do not ask the user
         solely for draft staff emails. Alias normalization is limited to equivalent
@@ -2436,6 +2487,9 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
         require explicit confirmation. Every bulk write leaves the workflow
         DISABLED, including edits to an existing workflow; publish_workflow is
         only for a later explicit user request to enable it.
+        Keep approval/task taskDescription plain text; use form-field tags only in
+        email subject/content and recipients. Approval/task configs have no subject;
+        use subject only for email steps.
 
         For common workflows, do not call list_step_types or get_step_schema first.
         Use these known configs directly:
@@ -2445,7 +2499,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
         Use assign form to add a form after a scheduled start; do not bind that form as trigger_form_id.
         integration shell: type=workflow_integration, subType is one of the supported IDs; config is empty or name only.
         email: type=workflow_send_email, config has name, to, subject, content. Use a trigger-form email field for applicant/customer notifications.
-        binary branch: type=workflow_binary_decision with conditionTerms and TRUE/FALSE connections.
+        binary branch: type=workflow_binary_decision with conditionTerms and TRUE/FALSE connections; conditionTermsMatchType is optional (All by default, Any for OR conditions).
         Choose the number of steps from the user's domain and detail level; do not follow a fixed
         count. Include intake/receipt notification, review/approval/task paths, parallel work,
         escalation, and outcome notifications only when they are useful.
@@ -2470,6 +2524,12 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
         if trigger_type not in {"form", "schedule"}:
             return BuildWorkflowBulkResult(error="trigger_type must be either 'form' or 'schedule'.")
         creating_new_workflow = not workflow_id
+        if creating_new_workflow and not template_search_state.template_search_completed_for_form(trigger_form_id):
+            return BuildWorkflowBulkResult(
+                error="Template search is required before creating a new workflow.",
+                hint="Call search_workflow_templates with a concise English workflow query, then retry build_workflow_bulk.",
+            )
+        warnings: list[str] = []
         normalized_delete_ids = [str(sid).strip() for sid in (delete_step_ids or []) if str(sid).strip()]
         normalized_delete_link_ids = [
             str(link_id).strip()
@@ -2477,7 +2537,6 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
             if str(link_id).strip()
         ]
         deleted_set = set(normalized_delete_ids)
-        warnings: list[str] = []
         update_items: list[tuple[str, dict]] = []
         seen_update_ids: set[str] = set()
         for update in step_updates or []:
@@ -2507,17 +2566,16 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
                 warnings=warnings,
                 error=(
                     "trigger_form_id is required for new form-submission workflows. "
-                    "Start with search_workflow_templates, then call create_form_with_ai "
-                    "and pass its form_id here."
+                    "Call create_form_with_ai, then pass its returned form_id here."
                 ),
-                hint="Use search_workflow_templates(query=...) -> create_form_with_ai(prompt=...) -> build_workflow_bulk(title=..., trigger_form_id=..., steps=..., connections=...).",
+                hint="Use create_form_with_ai(prompt=...) -> build_workflow_bulk(title=..., trigger_form_id=<returned form_id>, steps=..., connections=...).",
             )
         if not steps and not update_items and not normalized_delete_ids and not normalized_delete_link_ids and not connections:
             return BuildWorkflowBulkResult(
                 error=(
-                    "No steps provided to build_workflow_bulk. For a new workflow, start with "
-                    "search_workflow_templates and create_form_with_ai if a new trigger or assigned "
-                    "form is needed, then retry with complete steps and connections. Existing "
+                    "No steps provided to build_workflow_bulk. For a new workflow, call "
+                    "create_form_with_ai if a new trigger or assigned form is needed, then retry "
+                    "with complete steps and connections. Existing "
                     "workflows may instead provide step_updates or delete IDs."
                 )
             )
@@ -2728,7 +2786,9 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
             for w in type_warnings:
                 warnings.append(f"[{s_ref}] {w}")
             try:
-                clean_cfg, step_warnings = tb.validate_config(s_type, s_config)
+                clean_cfg, step_warnings = tb.validate_config(
+                    s_type, s_config, sanitize_task_descriptions=True
+                )
             except tb.ValidationError as e:
                 hint = "Call list_step_types to see valid values."
                 if s_type == "workflow_integration":
@@ -2811,12 +2871,11 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
                     warnings=warnings,
                     error=(
                         "trigger_form_id is required for new form-submission workflows. "
-                        "Start with search_workflow_templates, then call create_form_with_ai "
-                        "and pass its form_id here."
+                        "Call create_form_with_ai, then pass its returned form_id here."
                     ),
                     hint=(
-                        "Use search_workflow_templates(query=...) -> create_form_with_ai(prompt=...) -> build_workflow_bulk("
-                        "title=..., trigger_form_id=..., steps=..., connections=...)."
+                        "Use create_form_with_ai(prompt=...) -> build_workflow_bulk("
+                        "title=..., trigger_form_id=<returned form_id>, steps=..., connections=...)."
                     ),
                 )
 
@@ -3105,7 +3164,9 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
             for warning in alias_warnings:
                 warnings.append(f"[{step_id}] {warning}")
             try:
-                clean_update, update_warnings = tb.validate_config(step_type, update_config)
+                clean_update, update_warnings = tb.validate_config(
+                    step_type, update_config, sanitize_task_descriptions=True
+                )
             except tb.ValidationError as error:
                 return BuildWorkflowBulkResult(
                     workflow_id=workflow_id,
@@ -3785,6 +3846,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
             updated_at=updated_at,
             warnings=warnings,
             status=status_after_bulk,
+            next_required_tool="show_workflow",
             hint=(
                 f"Next required step: call show_workflow(workflow_id='{workflow_id}') immediately "
                 "to display the interactive visual workflow canvas to the user. "
@@ -3797,7 +3859,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
 
     @mcp.tool()
     def add_step(
-        workflow_id: Annotated[str, Field(description="From list_workflows.")],
+        workflow_id: Annotated[str, Field(description="From show_workflows or a previous workflow result.")],
         step_type: Annotated[str, Field(
             description='From list_step_types, e.g. "workflow_send_email".'
         )],
@@ -3845,7 +3907,9 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
         Returns the new step_id. Position on the canvas is chosen automatically.
         """
         try:
-            clean_config, warnings = tb.validate_config(step_type, config)
+            clean_config, warnings = tb.validate_config(
+                step_type, config, sanitize_task_descriptions=True
+            )
         except tb.ValidationError as e:
             return AddStepResult(
                 error=str(e), hint="Call list_step_types to see valid values.",
@@ -3995,7 +4059,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
 
     @mcp.tool()
     def connect_steps(
-        workflow_id: Annotated[str, Field(description="From list_workflows.")],
+        workflow_id: Annotated[str, Field(description="From show_workflows or a previous workflow result.")],
         from_step_id: Annotated[str, Field(description="From get_workflow's steps list.")],
         to_step_id: Annotated[str, Field(description="From get_workflow's steps list.")],
         outcome: Annotated[str, Field(
@@ -4102,7 +4166,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
 
     @mcp.tool()
     def disconnect_steps(
-        workflow_id: Annotated[str, Field(description="From list_workflows.")],
+        workflow_id: Annotated[str, Field(description="From show_workflows or a previous workflow result.")],
         link_id: Annotated[str, Field(
             description="From get_workflow's connections list."
         )],
@@ -4195,7 +4259,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
 
     @mcp.tool()
     def update_step(
-        workflow_id: Annotated[str, Field(description="From list_workflows.")],
+        workflow_id: Annotated[str, Field(description="From show_workflows or a previous workflow result.")],
         step_id: Annotated[str, Field(description="From get_workflow's steps list.")],
         config: Annotated[dict, Field(
             description=(

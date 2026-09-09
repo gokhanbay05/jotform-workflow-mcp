@@ -170,6 +170,7 @@ def test_show_workflows_returns_versioned_authoritative_payload():
     assert result.structured_content["view"] == "workflow-list"
     assert result.structured_content["schemaVersion"] == 1
     assert result.structured_content["data"]["workflows"][0]["workflow_id"] == "wf-1"
+    assert result.structured_content["data"]["limit"] == 100
 
 
 def test_show_workflow_returns_versioned_authoritative_payload():

@@ -10,12 +10,10 @@ def _tools(*names):
 
 def test_single_tool_surface_hides_deprecated_and_field_lookup_tools():
     tools = _tools(
-        "list_workflows",
         "get_workflow",
         "get_form_fields",
         "build_workflow_bulk",
         "create_form_with_ai",
-        "record_feature_request",
         "create_workflow",
         "create_workflow_with_ai_form",
         "add_step",
@@ -28,11 +26,9 @@ def test_single_tool_surface_hides_deprecated_and_field_lookup_tools():
     )
 
     assert [tool.name for tool in filter_tools(tools)] == [
-        "list_workflows",
         "get_workflow",
         "build_workflow_bulk",
         "create_form_with_ai",
-        "record_feature_request",
         "delete_workflow",
     ]
 
@@ -42,17 +38,16 @@ def test_fast_tools_exposes_decoupled_workflow_sequence_as_first_class_tools():
         "create_form_with_ai",
         "build_workflow_bulk",
         "show_workflow",
-        "record_feature_request",
     } <= FAST_TOOLS
 
 
 def test_profile_arguments_and_env_do_not_change_the_single_surface(monkeypatch):
     monkeypatch.setenv("MCP_TOOL_PROFILE", "fast")
-    tools = _tools("list_workflows", "get_form_fields", "build_workflow_bulk")
+    tools = _tools("list_workflows", "show_workflows", "get_form_fields", "build_workflow_bulk")
 
     assert current_profile() == "default"
     assert [tool.name for tool in filter_tools(tools, profile="full")] == [
-        "list_workflows",
+        "show_workflows",
         "build_workflow_bulk",
     ]
 

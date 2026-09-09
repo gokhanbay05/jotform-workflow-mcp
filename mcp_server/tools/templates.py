@@ -6,7 +6,7 @@ import re
 from typing import Annotated, Any
 from pydantic import BaseModel, Field
 from mcp.server import MCPServer
-from mcp_server import audit_log, rag_engine
+from mcp_server import audit_log, rag_engine, template_search_state
 
 
 class TemplateItem(BaseModel):
@@ -201,6 +201,17 @@ def _suggested_form_fields(elements: list[dict[str, Any]]) -> list[str]:
     return labels[:16]
 
 
+def _template_step_summary(summary: object) -> list[str]:
+    """Keep the blueprint summary focused on user-created workflow steps."""
+    if not isinstance(summary, list):
+        return []
+    return [
+        str(item)
+        for item in summary
+        if not str(item).lower().startswith("workflow_start_point")
+    ]
+
+
 def search_templates_tool(query: str, top_k: int = 1) -> TemplateSearchResult:
     k = max(1, min(top_k, 3))
     results = rag_engine.search_templates(query, top_k=k)
@@ -208,14 +219,18 @@ def search_templates_tool(query: str, top_k: int = 1) -> TemplateSearchResult:
     for r in results:
         raw_elements = r.get("elements") or []
         raw_links = r.get("links") or []
-        sanitized_elements = [_sanitize_template_element(e) for e in raw_elements if isinstance(e, dict)]
+        sanitized_elements = [
+            _sanitize_template_element(e)
+            for e in raw_elements
+            if isinstance(e, dict) and e.get("type") != "workflow_start_point"
+        ]
         sanitized_links = [_sanitize_template_link(l) for l in raw_links if isinstance(l, dict)]
         items.append(
             TemplateItem(
                 id=str(r.get("id")),
                 title=r.get("title", ""),
                 clone_count=int(r.get("clone_count") or 0),
-                steps_summary=r.get("steps_summary") or [],
+                steps_summary=_template_step_summary(r.get("steps_summary")),
                 score=float(r.get("score", 0.0)),
                 elements_count=len(sanitized_elements),
                 links_count=len(sanitized_links),
@@ -280,10 +295,14 @@ def register(mcp: MCPServer) -> None:
         ] = 1,
     ) -> TemplateSearchResult:
         """
-        Always search the local template catalog first for a close blueprint when building a new workflow.
+        Always search the local template catalog first for a close blueprint when
+        building a new workflow. This discovery call is required before any
+        workflow write, even when the user supplied concrete details.
 
         Use a concise English query. A result includes compact graph structure and
         inferred suggested_form_fields. Treat low/no matches as no template and continue;
         never force an unrelated blueprint onto the user's request.
         """
-        return search_templates_tool(query, top_k)
+        result = search_templates_tool(query, top_k)
+        template_search_state.mark_template_search()
+        return result

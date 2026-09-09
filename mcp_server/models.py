@@ -752,8 +752,10 @@ class BuildWorkflowBulkResult(BaseModel):
     current_updated_at: str | None = None
     warnings: list[str] = Field(default_factory=list)
     next_required_tool: str | None = Field(
-        "show_workflow",
-        description="Call show_workflow immediately after this tool to present the visual canvas to the user."
+        None,
+        description=(
+            "Set to show_workflow only after a successful write. Failed or preview-only calls leave it unset."
+        ),
     )
     error: str | None = None
     hint: str | None = None

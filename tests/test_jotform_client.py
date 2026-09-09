@@ -299,3 +299,43 @@ def test_update_tree_flattens_wire_payload_and_unflattens_echo(monkeypatch):
     assert data["pause__activated"] == "Yes"
     assert data["pause__executeWhen__afterAmount"] == "1"
     assert result["result"]["elements"][0]["data"]["pause"]["executeWhen"]["afterAmount"] == "1"
+
+
+def test_set_trigger_form_falls_back_to_update_tree_when_legacy_endpoint_is_unauthorized(monkeypatch):
+    client = JotformClient(api_key="secret-key")
+    calls = []
+
+    def fake_request(method, path, **kwargs):
+        calls.append((method, path, kwargs.get("json_body")))
+        if path.endswith("/setResource"):
+            raise JotformAPIError(401, "not authorized")
+        if path.endswith("/updateTree"):
+            return {"content": {}}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(client, "_request", fake_request)
+
+    client.set_trigger_form("wf_1", "form_1")
+
+    assert [call[:2] for call in calls] == [
+        ("POST", "/workflow/wf_1/setResource"),
+        ("PUT", "/workflow/wf_1/updateTree"),
+    ]
+    data = calls[1][2]["elements"][0]["data"]
+    assert data["resourceID"] == "form_1"
+    assert data["resourceType"] == "FORM"
+
+
+def test_set_trigger_form_keeps_unexpected_legacy_endpoint_errors(monkeypatch):
+    client = JotformClient(api_key="secret-key")
+
+    monkeypatch.setattr(
+        client,
+        "_request",
+        lambda *args, **kwargs: (_ for _ in ()).throw(JotformAPIError(500, "server error")),
+    )
+
+    with pytest.raises(JotformAPIError) as error:
+        client.set_trigger_form("wf_1", "form_1")
+
+    assert error.value.status == 500

@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from starlette.responses import FileResponse, PlainTextResponse
+from starlette.responses import PlainTextResponse, Response
 from starlette.routing import Route
 
 WORKFLOW_SETTINGS_RUNTIME_ROUTE = "/assets/workflow-settings-runtime.js"
@@ -48,8 +48,12 @@ async def serve_workflow_settings_runtime(_request):
             "Workflow settings runtime has not been built.",
             status_code=404,
         )
-    return FileResponse(
-        runtime_path,
+    # Read the small bundled asset into a normal response instead of using
+    # Starlette's FileResponse.  FileResponse performs an anyio thread-pool
+    # handoff during ASGI tests and can leave the MCP app hanging when it is
+    # served through httpx's in-process transport.
+    return Response(
+        runtime_path.read_bytes(),
         media_type="application/javascript",
         headers={
             "Cache-Control": "no-store",

@@ -843,7 +843,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
 
     @mcp.tool()
     def get_workflow(
-        workflow_id: Annotated[str, Field(description="From list_workflows.")],
+        workflow_id: Annotated[str, Field(description="From show_workflows or a previous workflow result.")],
     ) -> WorkflowDetail:
         """
         Get an existing workflow's structure: its steps, connections, and generic step state summaries.
@@ -874,7 +874,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
 
     @mcp.tool()
     def get_step_details(
-        workflow_id: Annotated[str, Field(description="From list_workflows.")],
+        workflow_id: Annotated[str, Field(description="From show_workflows or a previous workflow result.")],
         step_id: Annotated[str, Field(description="From get_workflow's steps list.")],
     ) -> StepDetail:
         """
@@ -888,7 +888,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
 
     @mcp.tool()
     def list_workflow_revisions(
-        workflow_id: Annotated[str, Field(description="From list_workflows.")],
+        workflow_id: Annotated[str, Field(description="From show_workflows or a previous workflow result.")],
         limit: Annotated[int, Field(
             description="Maximum revisions to return, newest first. Default 10."
         )] = 10,
@@ -909,7 +909,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
 
     @mcp.tool()
     def inspect_workflow_gaps(
-        workflow_id: Annotated[str, Field(description="From list_workflows.")],
+        workflow_id: Annotated[str, Field(description="From show_workflows or a previous workflow result.")],
     ) -> WorkflowGapReport:
         """
         Diagnostic gap analysis tool for existing workflows.
@@ -983,8 +983,8 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
 
         Use this when the user wants to browse forms or explicitly wants to
         build a workflow from an existing form. For new AI-generated workflow
-        drafts, use search_workflow_templates first, then create_form_with_ai
-        when a form is needed.
+        drafts, use search_workflow_templates first for blueprint inspiration,
+        then create_form_with_ai when a form is needed.
         """
         try:
             limit = max(1, min(limit, 100))

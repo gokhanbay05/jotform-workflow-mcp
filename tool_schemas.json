@@ -284,18 +284,18 @@
   },
   {
     "name": "show_workflows",
-    "description": "\n        Show the user's workflows in the interactive workflow list UI.\n\n        Use this presentation tool when the user asks to see, browse, list,\n        or choose from their workflows. It reads Jotform directly; never build\n        its payload from assistant prose or remembered tool results.\n        ",
+    "description": "\n        Show the user's workflows in the interactive workflow list UI.\n\n        Use this presentation tool when the user asks to see, browse, list,\n        or choose from their workflows. By default it shows the newest 100.\n        If more exist, tell the user that older workflows are available and\n        call it again with a higher offset when requested. It reads Jotform\n        directly; never build its payload from assistant prose or remembered\n        tool results.\n        ",
     "input_schema": {
       "properties": {
         "limit": {
-          "default": 50,
-          "description": "Page size, 1-100. Default 50.",
+          "default": 100,
+          "description": "Page size, 1-100. Default 100 (the newest workflows).",
           "title": "Limit",
           "type": "integer"
         },
         "offset": {
           "default": 0,
-          "description": "Zero-based page offset. Default 0.",
+          "description": "Zero-based page offset. Use a higher offset to show older workflows.",
           "title": "Offset",
           "type": "integer"
         }
@@ -477,7 +477,7 @@
     "input_schema": {
       "properties": {
         "workflow_id": {
-          "description": "Workflow id returned by build_workflow_bulk or resolved from list_workflows.",
+          "description": "Workflow id returned by build_workflow_bulk or resolved from show_workflows.",
           "title": "Workflow Id",
           "type": "string"
         }
@@ -862,176 +862,12 @@
     }
   },
   {
-    "name": "list_workflows",
-    "description": "\n        List one page of the user's workflows.\n\n        Returns each workflow's id, title, status, when it was last updated,\n        and run_count — how many times it has actually run, which is the\n        quickest way to tell a live workflow from an abandoned draft.\n\n        Use the id with get_workflow to see the steps.\n        ",
-    "input_schema": {
-      "properties": {
-        "limit": {
-          "default": 50,
-          "description": "Page size, 1-100. Default 50.",
-          "title": "Limit",
-          "type": "integer"
-        },
-        "offset": {
-          "default": 0,
-          "description": "Zero-based page offset. Default 0.",
-          "title": "Offset",
-          "type": "integer"
-        }
-      },
-      "title": "list_workflowsArguments",
-      "type": "object"
-    },
-    "output_schema": {
-      "$defs": {
-        "WorkflowSummary": {
-          "properties": {
-            "workflow_id": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "title": "Workflow Id"
-            },
-            "workflow_url": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "title": "Workflow Url"
-            },
-            "title": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "title": "Title"
-            },
-            "status": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "ENABLED / DISABLED etc.",
-              "title": "Status"
-            },
-            "updated_at": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "title": "Updated At"
-            },
-            "run_count": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "How many times this workflow has run",
-              "title": "Run Count"
-            }
-          },
-          "title": "WorkflowSummary",
-          "type": "object"
-        }
-      },
-      "properties": {
-        "workflows": {
-          "items": {
-            "$ref": "#/$defs/WorkflowSummary"
-          },
-          "title": "Workflows",
-          "type": "array"
-        },
-        "limit": {
-          "default": 50,
-          "title": "Limit",
-          "type": "integer"
-        },
-        "offset": {
-          "default": 0,
-          "title": "Offset",
-          "type": "integer"
-        },
-        "count": {
-          "default": 0,
-          "title": "Count",
-          "type": "integer"
-        },
-        "has_more": {
-          "default": false,
-          "title": "Has More",
-          "type": "boolean"
-        },
-        "next_offset": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Next Offset"
-        },
-        "error": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Error"
-        }
-      },
-      "title": "WorkflowList",
-      "type": "object"
-    }
-  },
-  {
     "name": "get_workflow",
     "description": "\n        Get an existing workflow's structure: its steps, connections, and generic step state summaries.\n\n        Use this before every mutation of an existing workflow to obtain fresh\n        numeric step/link IDs and revision_id. It is also the compact read tool\n        when the user asks to inspect a workflow. After a successful bulk write,\n        call show_workflow directly instead of reading again.\n\n        Each connection carries an `outcome` when it leaves a branching step:\n        TRUE or FALSE on an if/else, the branch name on a conditional\n        branch, or the button/outcome text on an approval/task. That is how\n        you tell two paths apart. A split's paths are equivalent and carry\n        no outcome.\n\n        `step_states` is the generic exact-match source for deciding whether a\n        requested workflow action already exists. If a step's config_complete is\n        false or missing_fields is not empty, do not treat it as completed. This\n        is not permission to repair, connect, or delete that step unless the user\n        explicitly requested that exact change.\n        `email_steps` is an additional compact view for email/survey/notification\n        requests.\n\n        Steps are summaries only — use get_step_details for one non-email step's\n        full configuration.\n        ",
     "input_schema": {
       "properties": {
         "workflow_id": {
-          "description": "From list_workflows.",
+          "description": "From show_workflows or a previous workflow result.",
           "title": "Workflow Id",
           "type": "string"
         }
@@ -1764,7 +1600,7 @@
     "input_schema": {
       "properties": {
         "workflow_id": {
-          "description": "From list_workflows.",
+          "description": "From show_workflows or a previous workflow result.",
           "title": "Workflow Id",
           "type": "string"
         },
@@ -1848,7 +1684,7 @@
     "input_schema": {
       "properties": {
         "workflow_id": {
-          "description": "From list_workflows.",
+          "description": "From show_workflows or a previous workflow result.",
           "title": "Workflow Id",
           "type": "string"
         },
@@ -2043,7 +1879,7 @@
   },
   {
     "name": "list_forms",
-    "description": "\n        List one page of the user's forms, with each form's id, title, status and\n        submission count.\n\n        Use this when the user wants to browse forms or explicitly wants to\n        build a workflow from an existing form. For new AI-generated workflow\n        drafts, use search_workflow_templates first, then create_form_with_ai\n        when a form is needed.\n        ",
+    "description": "\n        List one page of the user's forms, with each form's id, title, status and\n        submission count.\n\n        Use this when the user wants to browse forms or explicitly wants to\n        build a workflow from an existing form. For new AI-generated workflow\n        drafts, use search_workflow_templates first for blueprint inspiration,\n        then create_form_with_ai when a form is needed.\n        ",
     "input_schema": {
       "properties": {
         "limit": {
@@ -2199,7 +2035,7 @@
   },
   {
     "name": "search_workflow_templates",
-    "description": "\n        Always search the local template catalog first for a close blueprint when building a new workflow.\n\n        Use a concise English query. A result includes compact graph structure and\n        inferred suggested_form_fields. Treat low/no matches as no template and continue;\n        never force an unrelated blueprint onto the user's request.\n        ",
+    "description": "\n        Always search the local template catalog first for a close blueprint when\n        building a new workflow. This discovery call is required before any\n        workflow write, even when the user supplied concrete details.\n\n        Use a concise English query. A result includes compact graph structure and\n        inferred suggested_form_fields. Treat low/no matches as no template and continue;\n        never force an unrelated blueprint onto the user's request.\n        ",
     "input_schema": {
       "properties": {
         "query": {
@@ -2338,7 +2174,7 @@
   },
   {
     "name": "create_form_with_ai",
-    "description": "\n        Create a new Jotform form from an AI prompt.\n\n        Call this only after search_workflow_templates when building a new\n        workflow that needs an AI-generated form. This is the first write, not\n        the first tool call. For form-submission workflows, the form becomes\n        trigger_form_id. For scheduled workflows, the form is assigned after the\n        schedule starts with workflow_assign_form.formID. Do not use external\n        Jotform form plugins/tools for workflow requests; they do not return\n        this server's field contract or stay inside the workflow audit/build\n        chain. It returns form_id plus the exact field_id, name, label, type,\n        required, and options values for the subsequent build_workflow_bulk call. Use\n        field name values inside email subject/content variables and recipient\n        field references. No\n        separate form-field lookup is needed. This form-only result is not\n        complete when the user requested a workflow; if template search has not\n        already happened, call search_workflow_templates before build_workflow_bulk.\n        ",
+    "description": "\n        Create a new Jotform form from an AI prompt.\n\n        Call this only after search_workflow_templates when building a new\n        workflow that needs an AI-generated form. This is the first write, not\n        the first tool call. For form-submission workflows, the form becomes\n        trigger_form_id. For scheduled workflows, the form is assigned after the\n        schedule starts with workflow_assign_form.formID. Do not use external\n        Jotform form plugins/tools for workflow requests; they do not return\n        this server's field contract or stay inside the workflow audit/build\n        chain. It returns form_id plus the exact field_id, name, label, type,\n        required, and options values for the subsequent build_workflow_bulk call. Use\n        field name values inside email subject/content variables and recipient\n        field references. No separate form-field lookup is needed. This\n        form-only result is not complete when the user requested a workflow;\n        if template search has not already happened, call\n        search_workflow_templates before build_workflow_bulk.\n        ",
     "input_schema": {
       "properties": {
         "prompt": {
@@ -2616,7 +2452,7 @@
   },
   {
     "name": "build_workflow_bulk",
-    "description": "\n        Create or mutate a workflow graph with one final updateTree write.\n\n        New form-submission flow: search_workflow_templates -> create_form_with_ai -> build_workflow_bulk -> show_workflow.\n        New scheduled flow: search_workflow_templates -> build_workflow_bulk(trigger_type=\"schedule\", trigger_schedule=...) -> show_workflow.\n        New scheduled assigned-form flow: search_workflow_templates -> create_form_with_ai -> build_workflow_bulk(trigger_type=\"schedule\", trigger_schedule=..., workflow_assign_form.formID=...) -> show_workflow.\n        Do not use external Jotform form plugins/tools for the AI trigger form.\n        Existing workflow flow: get_workflow -> build_workflow_bulk -> show_workflow.\n        Use step_updates for existing configuration edits and steps for new nodes.\n        If the user asks to add a 3rd-party integration (Slack, WhatsApp,\n        Zendesk, Asana, Google Sheets, Microsoft Teams, etc.), you MUST add it\n        as a blank shell step: set type=\"workflow_integration\", set StepSpec\n        subType to the specific supported integration ID, and DO NOT fill any\n        authentication, OAuth, account, mapping, channel, project, ticket, or\n        message configuration fields. The user completes settings in Jotform UI.\n        Missing content/subject/body/outcome config is an error; the server validates\n        but does not invent email content or fallback graph nodes for you. Draft\n        reasonable content from the user's request and template blueprint. For new draft workflows,\n        missing staff approvers/assignees are filled with reserved role placeholders\n        such as hr@workflow.invalid or manager@workflow.invalid. Do not ask the user\n        solely for draft staff emails. Alias normalization is limited to equivalent\n        field names. Deletes that would orphan downstream nodes return a preview and\n        require explicit confirmation. Every bulk write leaves the workflow\n        DISABLED, including edits to an existing workflow; publish_workflow is\n        only for a later explicit user request to enable it.\n\n        For common workflows, do not call list_step_types or get_step_schema first.\n        Use these known configs directly:\n        approval: type=workflow_approval, config has name, approver=hr@workflow.invalid if unknown, taskDescription.\n        task: type=workflow_assign_task, config has name, assignee=manager@workflow.invalid if unknown, taskDescription, outcomes=[\"Complete\"].\n        assign form: type=workflow_assign_form, config has name, formID, assignee, requireLogin=\"Yes\".\n        Use assign form to add a form after a scheduled start; do not bind that form as trigger_form_id.\n        integration shell: type=workflow_integration, subType is one of the supported IDs; config is empty or name only.\n        email: type=workflow_send_email, config has name, to, subject, content. Use a trigger-form email field for applicant/customer notifications.\n        binary branch: type=workflow_binary_decision with conditionTerms and TRUE/FALSE connections.\n        Choose the number of steps from the user's domain and detail level; do not follow a fixed\n        count. Include intake/receipt notification, review/approval/task paths, parallel work,\n        escalation, and outcome notifications only when they are useful.\n        ",
+    "description": "\n        Create or mutate a workflow graph with one final updateTree write.\n\n        New form-submission flow: search_workflow_templates ->\n        create_form_with_ai -> build_workflow_bulk\n        -> show_workflow.\n        New scheduled flow: search_workflow_templates ->\n        build_workflow_bulk(trigger_type=\"schedule\", trigger_schedule=...) ->\n        show_workflow.\n        New scheduled assigned-form flow: search_workflow_templates ->\n        then create_form_with_ai -> build_workflow_bulk(trigger_type=\"schedule\",\n        trigger_schedule=..., workflow_assign_form.formID=...) -> show_workflow.\n        Do not use external Jotform form plugins/tools for the AI trigger form.\n        Existing workflow flow: get_workflow -> build_workflow_bulk -> show_workflow.\n        Use step_updates for existing configuration edits and steps for new nodes.\n        If the user asks to add a 3rd-party integration (Slack, WhatsApp,\n        Zendesk, Asana, Google Sheets, Microsoft Teams, etc.), you MUST add it\n        as a blank shell step: set type=\"workflow_integration\", set StepSpec\n        subType to the specific supported integration ID, and DO NOT fill any\n        authentication, OAuth, account, mapping, channel, project, ticket, or\n        message configuration fields. The user completes settings in Jotform UI.\n        Missing content/subject/body/outcome config is an error; the server validates\n        but does not invent email content or fallback graph nodes for you. Draft\n        reasonable content from the user's request and the template blueprint. For new draft workflows,\n        missing staff approvers/assignees are filled with reserved role placeholders\n        such as hr@workflow.invalid or manager@workflow.invalid. Do not ask the user\n        solely for draft staff emails. Alias normalization is limited to equivalent\n        field names. Deletes that would orphan downstream nodes return a preview and\n        require explicit confirmation. Every bulk write leaves the workflow\n        DISABLED, including edits to an existing workflow; publish_workflow is\n        only for a later explicit user request to enable it.\n        Keep approval/task taskDescription plain text; use form-field tags only in\n        email subject/content and recipients. Approval/task configs have no subject;\n        use subject only for email steps.\n\n        For common workflows, do not call list_step_types or get_step_schema first.\n        Use these known configs directly:\n        approval: type=workflow_approval, config has name, approver=hr@workflow.invalid if unknown, taskDescription.\n        task: type=workflow_assign_task, config has name, assignee=manager@workflow.invalid if unknown, taskDescription, outcomes=[\"Complete\"].\n        assign form: type=workflow_assign_form, config has name, formID, assignee, requireLogin=\"Yes\".\n        Use assign form to add a form after a scheduled start; do not bind that form as trigger_form_id.\n        integration shell: type=workflow_integration, subType is one of the supported IDs; config is empty or name only.\n        email: type=workflow_send_email, config has name, to, subject, content. Use a trigger-form email field for applicant/customer notifications.\n        binary branch: type=workflow_binary_decision with conditionTerms and TRUE/FALSE connections; conditionTermsMatchType is optional (All by default, Any for OR conditions).\n        Choose the number of steps from the user's domain and detail level; do not follow a fixed\n        count. Include intake/receipt notification, review/approval/task paths, parallel work,\n        escalation, and outcome notifications only when they are useful.\n        ",
     "input_schema": {
       "$defs": {
         "ConnectionSpec": {
@@ -3087,8 +2923,8 @@
               "type": "null"
             }
           ],
-          "default": "show_workflow",
-          "description": "Call show_workflow immediately after this tool to present the visual canvas to the user.",
+          "default": null,
+          "description": "Set to show_workflow only after a successful write. Failed or preview-only calls leave it unset.",
           "title": "Next Required Tool"
         },
         "error": {
@@ -3312,7 +3148,7 @@
     "input_schema": {
       "properties": {
         "workflow_id": {
-          "description": "From list_workflows.",
+          "description": "From show_workflows or a previous workflow result.",
           "title": "Workflow Id",
           "type": "string"
         },
@@ -3519,7 +3355,7 @@
     "input_schema": {
       "properties": {
         "workflow_id": {
-          "description": "From list_workflows.",
+          "description": "From show_workflows or a previous workflow result.",
           "title": "Workflow Id",
           "type": "string"
         },
@@ -3616,94 +3452,6 @@
         }
       },
       "title": "DeleteWorkflowResult",
-      "type": "object"
-    }
-  },
-  {
-    "name": "record_feature_request",
-    "description": "\n        Record a genuine product gap after the workflow has been shown.\n\n        Call only after `show_workflow`, and only for a missing template or an\n        unsupported workflow capability. Do not record ordinary validation or\n        transient Jotform API failures as feature requests.\n        ",
-    "input_schema": {
-      "properties": {
-        "category": {
-          "description": "Use missing_template when no close workflow template exists; use unsupported_workflow_capability when the requested trigger, step, integration, or behavior is unavailable.",
-          "enum": [
-            "missing_template",
-            "unsupported_workflow_capability"
-          ],
-          "title": "Category",
-          "type": "string"
-        },
-        "request_summary": {
-          "description": "Short English summary without PII, credentials, or form answers.",
-          "title": "Request Summary",
-          "type": "string"
-        },
-        "workflow_id": {
-          "default": "",
-          "title": "Workflow Id",
-          "type": "string"
-        },
-        "workflow_url": {
-          "default": "",
-          "title": "Workflow Url",
-          "type": "string"
-        },
-        "top_template_id": {
-          "default": "",
-          "title": "Top Template Id",
-          "type": "string"
-        },
-        "top_template_title": {
-          "default": "",
-          "title": "Top Template Title",
-          "type": "string"
-        },
-        "top_template_score": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Top Template Score"
-        },
-        "missing_capability": {
-          "default": "",
-          "title": "Missing Capability",
-          "type": "string"
-        },
-        "evidence": {
-          "default": "",
-          "title": "Evidence",
-          "type": "string"
-        }
-      },
-      "required": [
-        "category",
-        "request_summary"
-      ],
-      "title": "record_feature_requestArguments",
-      "type": "object"
-    },
-    "output_schema": {
-      "properties": {
-        "recorded": {
-          "title": "Recorded",
-          "type": "boolean"
-        },
-        "reason": {
-          "title": "Reason",
-          "type": "string"
-        }
-      },
-      "required": [
-        "recorded",
-        "reason"
-      ],
-      "title": "FeatureRequestResult",
       "type": "object"
     }
   }

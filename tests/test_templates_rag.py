@@ -55,6 +55,11 @@ def test_search_workflow_templates_tool():
         assert isinstance(first.links, list)
         assert first.elements_count == len(first.elements)
         assert first.links_count == len(first.links)
+        assert all(item["type"] != "workflow_start_point" for item in first.elements)
+        assert all(
+            not item.lower().startswith("workflow_start_point")
+            for item in first.steps_summary
+        )
 
 
 def test_template_blueprint_keeps_useful_fields_without_html_noise():

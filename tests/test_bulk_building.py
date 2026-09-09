@@ -5,8 +5,9 @@ from mcp.server import MCPServer
 
 from mcp_server.jotform_client import JotformAPIError, PartialWorkflowCreateError
 from mcp_server.models import ConnectionSpec, StepSpec, StepUpdateSpec
-from mcp_server import tree_builder as tb
+from mcp_server import template_search_state, tree_builder as tb
 from mcp_server.tools import building
+from mcp_server.telemetry_context import bind_context
 from mcp_server.ui import create_workflow_apps
 
 
@@ -230,6 +231,41 @@ def test_create_form_with_ai_strips_stop_after_form_prompt():
     assert result.next_required_tool == "build_workflow_bulk"
 
 
+def test_bind_and_verify_trigger_tolerates_eventual_readback(monkeypatch):
+    client = DummyClient()
+    client.elements[0] = {
+        "element_id": 1,
+        "type": "workflow_start_point",
+        "position": {"x": 0, "y": 0},
+    }
+    reads = []
+
+    def delayed_get_element(workflow_id, element_id):
+        reads.append((workflow_id, element_id))
+        if len(reads) == 1:
+            return {
+                "element_id": 1,
+                "type": "workflow_start_point",
+                "resourceID": None,
+                "resourceType": "FORM",
+            }
+        return {
+            "element_id": 1,
+            "type": "workflow_start_point",
+            "resourceID": "form_delayed",
+            "resourceType": "FORM",
+        }
+
+    monkeypatch.setattr(building, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(client, "get_element", delayed_get_element)
+
+    result = building._bind_and_verify_trigger(client, "wf_1", "form_delayed", "Demo")
+
+    assert result is None
+    assert client.bound_trigger_forms == [("wf_1", "form_delayed")]
+    assert len(reads) == 2
+
+
 def test_decoupled_university_workflow_runs_create_build_show_with_zero_retry():
     mcp = DummyMCP()
     client = DecoupledFlowClient()
@@ -277,6 +313,7 @@ def test_decoupled_university_workflow_runs_create_build_show_with_zero_retry():
     assert result.error is None
     assert result.workflow_id == "wf_new_1"
     assert result.status == "DISABLED"
+    assert result.next_required_tool == "show_workflow"
     assert "The workflow is DISABLED after this bulk write" in result.hint
     assert "ask whether the user wants to enable it" in result.hint
     assert "Do not call publish_workflow until the user explicitly agrees" in result.hint
@@ -345,6 +382,74 @@ def test_build_workflow_bulk_linear_chain():
     assert "ask whether the user wants to enable it" in result.hint
     assert client.created_workflows == []
     assert client.created_forms == []
+
+
+def test_new_workflow_writes_require_template_search_in_the_mcp_session():
+    mcp = DummyMCP()
+    client = DummyClient()
+    building.register(mcp, client)
+
+    with bind_context(session_id="template-search-required"):
+        form_result = mcp.tools["create_form_with_ai"]("Create a help desk form.")
+        build_result = mcp.tools["build_workflow_bulk"](
+            title="Help Desk Workflow",
+            trigger_form_id="form_without_template_search",
+        )
+
+    assert "Template search is required" in form_result.error
+    assert "search_workflow_templates" in form_result.hint
+    assert "Template search is required" in build_result.error
+    assert "search_workflow_templates" in build_result.hint
+    assert client.created_forms == []
+    assert client.created_workflows == []
+
+
+def test_template_search_marker_allows_new_form_creation_in_the_mcp_session():
+    mcp = DummyMCP()
+    client = DummyClient()
+    building.register(mcp, client)
+
+    with bind_context(session_id="template-search-complete"):
+        template_search_state.mark_template_search()
+        result = mcp.tools["create_form_with_ai"]("Create a help desk form.")
+
+    assert result.error is None
+    assert client.created_forms == [{
+        "prompt": "Create a help desk form.",
+        "form_type": "classic",
+        "language": "en",
+    }]
+
+
+def test_template_backed_form_allows_new_workflow_in_a_later_mcp_session():
+    mcp = DummyMCP()
+    client = DummyClient()
+    building.register(mcp, client)
+
+    with bind_context(session_id="template-search-form-session"):
+        template_search_state.mark_template_search()
+        form = mcp.tools["create_form_with_ai"]("Create a help desk form.")
+
+    with bind_context(session_id="template-search-build-session"):
+        result = mcp.tools["build_workflow_bulk"](
+            title="Help Desk Workflow",
+            trigger_form_id=form.form_id,
+            steps=[
+                StepSpec(
+                    ref="support_task",
+                    type="workflow_assign_task",
+                    config={
+                        "assignee": "support@workflow.invalid",
+                        "taskDescription": "Resolve the ticket.",
+                        "outcomes": ["Complete"],
+                    },
+                ),
+            ],
+            connections=[ConnectionSpec(from_ref="start", to_ref="support_task")],
+        )
+
+    assert result.error is None
+    assert result.workflow_id == "wf_new_1"
 
 
 def test_build_workflow_bulk_creates_workflow_with_trigger_form_when_workflow_id_omitted():
@@ -649,7 +754,7 @@ def test_schedule_assigned_form_fields_can_drive_email_recipients_before_create(
                 config={
                     "approver": "manager@workflow.invalid",
                     "name": "Manager Approval",
-                    "taskDescription": "Review {Employee Name}'s report for {Week Ending Date}.",
+                    "taskDescription": "Review the employee's weekly report.",
                 },
             ),
             StepSpec(
@@ -1032,7 +1137,8 @@ def test_build_workflow_bulk_rejects_new_workflow_without_trigger_form_id():
 
     assert result.error
     assert "trigger_form_id is required for new form-submission workflows" in result.error
-    assert "search_workflow_templates" in result.error
+    assert "create_form_with_ai" in result.error
+    assert result.next_required_tool is None
     assert client.created_forms == []
     assert client.created_workflows == []
 
@@ -1122,6 +1228,82 @@ def test_build_workflow_bulk_normalizes_condition_field_labels_after_ai_form_cre
     decision = client.update_calls[0]["elements"][0]["data"]
     assert decision["conditionTerms"][0]["field"] == "2_email"
     assert any("Normalized condition field references" in warning for warning in result.warnings)
+
+
+def test_build_workflow_bulk_normalizes_condition_field_name_alias():
+    mcp = DummyMCP()
+    client = DummyClient()
+    building.register(mcp, client)
+
+    steps = [
+        StepSpec(
+            ref="decision_1",
+            type="workflow_binary_decision",
+            config={
+                "name": "Has email?",
+                "conditionTerms": [{
+                    "fieldName": "Email",
+                    "operator": "isFilled",
+                }],
+            },
+        ),
+        StepSpec(
+            ref="notify_1",
+            type="workflow_send_email",
+            config={"to": "user@company.com", "subject": "Ok", "content": "Has email."},
+        ),
+        StepSpec(
+            ref="notify_2",
+            type="workflow_send_email",
+            config={"to": "user@company.com", "subject": "Missing", "content": "Missing email."},
+        ),
+    ]
+    connections = [
+        ConnectionSpec(from_ref="start", to_ref="decision_1"),
+        ConnectionSpec(from_ref="decision_1", to_ref="notify_1", outcome="TRUE"),
+        ConnectionSpec(from_ref="decision_1", to_ref="notify_2", outcome="FALSE"),
+    ]
+
+    result = mcp.tools["build_workflow_bulk"](
+        steps=steps,
+        connections=connections,
+        title="Email Alias Workflow",
+        trigger_form_id="form_ai_1",
+    )
+
+    assert result.error is None
+    decision = client.update_calls[0]["elements"][0]["data"]
+    assert decision["conditionTerms"][0]["field"] == "2_email"
+    assert "fieldName" not in decision["conditionTerms"][0]
+    assert any("fieldName" in warning for warning in result.warnings)
+
+
+def test_build_workflow_bulk_sanitizes_task_description_and_ignores_subject():
+    mcp = DummyMCP()
+    client = DummyClient()
+    building.register(mcp, client)
+
+    result = mcp.tools["build_workflow_bulk"](
+        "wf_1",
+        steps=[StepSpec(
+            ref="review",
+            type="workflow_approval",
+            config={
+                "name": "Manager Review",
+                "approver": "manager@company.com",
+                "subject": "Review subject",
+                "taskDescription": "Review the request.\nRequester: {q2_name}\nSubject: {q4_subject}",
+            },
+        )],
+        connections=[ConnectionSpec(from_ref="start", to_ref="review")],
+    )
+
+    assert result.error is None
+    review = client.update_calls[0]["elements"][0]["data"]
+    assert review["taskDescription"] == "Review the request."
+    assert "subject" not in review
+    assert any("form-field tags removed" in warning for warning in result.warnings)
+    assert any("unsupported field 'subject'" in warning for warning in result.warnings)
 
 
 def test_build_workflow_bulk_creates_workflow_with_existing_trigger_form():
@@ -1364,7 +1546,7 @@ def test_build_workflow_bulk_empty_steps_rejected():
     result = mcp.tools["build_workflow_bulk"]("wf_1", steps=[], connections=[])
     assert result.error
     assert "No steps provided" in result.error
-    assert "search_workflow_templates" in result.error
+    assert "create_form_with_ai" in result.error
 
 
 def test_build_workflow_bulk_creates_blank_integration_shell():
