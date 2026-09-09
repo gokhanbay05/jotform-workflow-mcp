@@ -29,7 +29,7 @@ from mcp_server.tools.reading import (
 # Bump this whenever the embedded MCP UI or its CSP contract changes. Clients
 # cache `ui://` resources by URI, so reusing a version can leave an older host
 # unable to load a newly configured settings runtime.
-WORKFLOW_UI_RESOURCE_VERSION = 96
+WORKFLOW_UI_RESOURCE_VERSION = 99
 WORKFLOW_UI_RESOURCE_URI = (
     f"ui://jotform/workflows/v{WORKFLOW_UI_RESOURCE_VERSION}.html"
 )
@@ -47,6 +47,7 @@ WORKFLOW_UI_RESOURCE_ORIGINS = (
     "https://www.jotform.com",
     "https://cdn.jotfor.ms",
 )
+WORKFLOW_UI_FRAME_ORIGINS = ("https://www.jotform.com",)
 
 _FALLBACK_HTML = """<!doctype html>
 <html lang="en">
@@ -127,7 +128,7 @@ def create_workflow_apps(client: JotformClient, *, html: str | None = None) -> A
             csp=ResourceCsp(
                 connect_domains=list(WORKFLOW_UI_CONNECT_ORIGINS),
                 resource_domains=resource_domains,
-                frame_domains=[],
+                frame_domains=list(WORKFLOW_UI_FRAME_ORIGINS),
                 base_uri_domains=[],
             ),
             prefers_border=True,

@@ -104,7 +104,7 @@ def _server():
 
 
 def test_ui_resource_is_registered_with_mcp_app_mime_type():
-    assert WORKFLOW_UI_RESOURCE_URI == "ui://jotform/workflows/v96.html"
+    assert WORKFLOW_UI_RESOURCE_URI == "ui://jotform/workflows/v99.html"
 
     with patch.dict("os.environ", {"WORKFLOW_SETTINGS_RUNTIME_URL": ""}):
         server = _server()
@@ -116,7 +116,7 @@ def test_ui_resource_is_registered_with_mcp_app_mime_type():
     assert resource.meta["ui"]["csp"] == {
         "connectDomains": ["https://api.jotform.com"],
         "resourceDomains": ["https://www.jotform.com", "https://cdn.jotfor.ms"],
-        "frameDomains": [],
+        "frameDomains": ["https://www.jotform.com"],
         "baseUriDomains": [],
     }
     assert resource.meta["ui"]["prefersBorder"] is True
@@ -126,7 +126,7 @@ def test_ui_resource_is_registered_with_mcp_app_mime_type():
     assert "workflow ui" in contents[0].content
 
 
-def test_ui_csp_uses_exact_origins_and_disallows_nested_frames():
+def test_ui_csp_uses_exact_origins_and_limits_form_preview_frames():
     with patch.dict("os.environ", {"WORKFLOW_SETTINGS_RUNTIME_URL": ""}):
         resources = asyncio.run(_server().list_resources())
     resource = next(item for item in resources if str(item.uri) == WORKFLOW_UI_RESOURCE_URI)
@@ -137,7 +137,7 @@ def test_ui_csp_uses_exact_origins_and_disallows_nested_frames():
         "https://www.jotform.com",
         "https://cdn.jotfor.ms",
     ]
-    assert csp["frameDomains"] == []
+    assert csp["frameDomains"] == ["https://www.jotform.com"]
     assert csp["baseUriDomains"] == []
     assert all("*" not in origin for origins in csp.values() for origin in origins)
 
