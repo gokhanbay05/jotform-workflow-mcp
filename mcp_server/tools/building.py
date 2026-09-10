@@ -3859,7 +3859,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
 
     @mcp.tool()
     def add_step(
-        workflow_id: Annotated[str, Field(description="From show_workflows or a previous workflow result.")],
+        workflow_id: Annotated[str, Field(description="From list_workflows or a previous workflow result.")],
         step_type: Annotated[str, Field(
             description='From list_step_types, e.g. "workflow_send_email".'
         )],
@@ -4059,7 +4059,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
 
     @mcp.tool()
     def connect_steps(
-        workflow_id: Annotated[str, Field(description="From show_workflows or a previous workflow result.")],
+        workflow_id: Annotated[str, Field(description="From list_workflows or a previous workflow result.")],
         from_step_id: Annotated[str, Field(description="From get_workflow's steps list.")],
         to_step_id: Annotated[str, Field(description="From get_workflow's steps list.")],
         outcome: Annotated[str, Field(
@@ -4166,7 +4166,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
 
     @mcp.tool()
     def disconnect_steps(
-        workflow_id: Annotated[str, Field(description="From show_workflows or a previous workflow result.")],
+        workflow_id: Annotated[str, Field(description="From list_workflows or a previous workflow result.")],
         link_id: Annotated[str, Field(
             description="From get_workflow's connections list."
         )],
@@ -4259,7 +4259,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
 
     @mcp.tool()
     def update_step(
-        workflow_id: Annotated[str, Field(description="From show_workflows or a previous workflow result.")],
+        workflow_id: Annotated[str, Field(description="From list_workflows or a previous workflow result.")],
         step_id: Annotated[str, Field(description="From get_workflow's steps list.")],
         config: Annotated[dict, Field(
             description=(

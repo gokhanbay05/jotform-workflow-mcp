@@ -45,4 +45,4 @@ def test_tool_list_serializes_for_current_mcp_protocol():
         },
     )
 
-    assert len(result["tools"]) == 16
+    assert len(result["tools"]) == 17

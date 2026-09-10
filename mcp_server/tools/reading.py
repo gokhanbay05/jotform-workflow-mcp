@@ -837,13 +837,15 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
         and run_count — how many times it has actually run, which is the
         quickest way to tell a live workflow from an abandoned draft.
 
-        Use the id with get_workflow to see the steps.
+        Use this compact non-UI tool to resolve a named workflow before calling
+        show_workflow. Do not call the interactive show_workflows list merely
+        to look up an id. Use the id with get_workflow before a mutation.
         """
         return read_workflow_list(client, limit=limit, offset=offset)
 
     @mcp.tool()
     def get_workflow(
-        workflow_id: Annotated[str, Field(description="From show_workflows or a previous workflow result.")],
+        workflow_id: Annotated[str, Field(description="From list_workflows or a previous workflow result.")],
     ) -> WorkflowDetail:
         """
         Get an existing workflow's structure: its steps, connections, and generic step state summaries.
@@ -874,7 +876,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
 
     @mcp.tool()
     def get_step_details(
-        workflow_id: Annotated[str, Field(description="From show_workflows or a previous workflow result.")],
+        workflow_id: Annotated[str, Field(description="From list_workflows or a previous workflow result.")],
         step_id: Annotated[str, Field(description="From get_workflow's steps list.")],
     ) -> StepDetail:
         """
@@ -888,7 +890,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
 
     @mcp.tool()
     def list_workflow_revisions(
-        workflow_id: Annotated[str, Field(description="From show_workflows or a previous workflow result.")],
+        workflow_id: Annotated[str, Field(description="From list_workflows or a previous workflow result.")],
         limit: Annotated[int, Field(
             description="Maximum revisions to return, newest first. Default 10."
         )] = 10,
@@ -909,7 +911,7 @@ def register(mcp: MCPServer, client: JotformClient) -> None:
 
     @mcp.tool()
     def inspect_workflow_gaps(
-        workflow_id: Annotated[str, Field(description="From show_workflows or a previous workflow result.")],
+        workflow_id: Annotated[str, Field(description="From list_workflows or a previous workflow result.")],
     ) -> WorkflowGapReport:
         """
         Diagnostic gap analysis tool for existing workflows.

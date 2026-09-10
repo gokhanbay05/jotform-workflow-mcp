@@ -10,12 +10,12 @@ def test_mcp_uses_single_tool_surface_even_when_profile_env_is_set(monkeypatch):
     tools = asyncio.run(mcp.list_tools())
     tool_names = {tool.name for tool in tools}
 
-    assert len(tools) == 16
+    assert len(tools) == 17
     assert "build_workflow_bulk" in tool_names
     assert "apply_workflow_canvas_diff" not in tool_names
     assert "create_form_with_ai" in tool_names
     assert "show_workflows" in tool_names
-    assert "list_workflows" not in tool_names
+    assert "list_workflows" in tool_names
     assert "search_workflow_templates" in tool_names
     assert "get_workflow_template" not in tool_names
     assert "get_step_details" in tool_names
@@ -60,6 +60,7 @@ def test_server_instructions_describe_decoupled_three_tool_sequence(monkeypatch)
     assert "Do not answer the user" in instructions
     assert "assigned_forms[].form_url" in instructions
     assert "The iframe is permanently read-only" in instructions
+    assert "Never call show_workflows merely to resolve a name" in instructions
     assert '"step_type": "workflow_binary_decision"' in instructions
     assert "conditionTermsMatchType" in instructions
 
@@ -71,6 +72,7 @@ def test_tool_schemas_expose_decoupled_form_then_workflow_contract(monkeypatch):
     create_tool = tools["create_form_with_ai"]
     build_tool = tools["build_workflow_bulk"]
     show_tool = tools["show_workflow"]
+    list_tool = tools["list_workflows"]
     publish_tool = tools["publish_workflow"]
 
     assert "Call this only after search_workflow_templates" in create_tool.description
@@ -84,6 +86,7 @@ def test_tool_schemas_expose_decoupled_form_then_workflow_contract(monkeypatch):
     assert "conditionTermsMatchType" in build_tool.description
     assert "assigned_forms" in build_tool.output_schema["properties"]
     assert "Call immediately after build_workflow_bulk" in show_tool.description
+    assert "compact non-UI tool" in list_tool.description
     assert publish_tool.input_schema["properties"]["confirm"]["default"] is False
     assert "only call even the preview after the user explicitly asks" in publish_tool.input_schema["properties"]["confirm"]["description"]
     assert "Do not use this as the normal final step" in publish_tool.description

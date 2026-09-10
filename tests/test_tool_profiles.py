@@ -37,6 +37,7 @@ def test_fast_tools_exposes_decoupled_workflow_sequence_as_first_class_tools():
     assert {
         "create_form_with_ai",
         "build_workflow_bulk",
+        "list_workflows",
         "show_workflow",
     } <= FAST_TOOLS
 
@@ -47,6 +48,7 @@ def test_profile_arguments_and_env_do_not_change_the_single_surface(monkeypatch)
 
     assert current_profile() == "default"
     assert [tool.name for tool in filter_tools(tools, profile="full")] == [
+        "list_workflows",
         "show_workflows",
         "build_workflow_bulk",
     ]

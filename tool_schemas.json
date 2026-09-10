@@ -477,7 +477,7 @@
     "input_schema": {
       "properties": {
         "workflow_id": {
-          "description": "Workflow id returned by build_workflow_bulk or resolved from show_workflows.",
+          "description": "Workflow id returned by build_workflow_bulk or resolved from list_workflows.",
           "title": "Workflow Id",
           "type": "string"
         }
@@ -862,12 +862,176 @@
     }
   },
   {
+    "name": "list_workflows",
+    "description": "\n        List one page of the user's workflows.\n\n        Returns each workflow's id, title, status, when it was last updated,\n        and run_count — how many times it has actually run, which is the\n        quickest way to tell a live workflow from an abandoned draft.\n\n        Use this compact non-UI tool to resolve a named workflow before calling\n        show_workflow. Do not call the interactive show_workflows list merely\n        to look up an id. Use the id with get_workflow before a mutation.\n        ",
+    "input_schema": {
+      "properties": {
+        "limit": {
+          "default": 50,
+          "description": "Page size, 1-100. Default 50.",
+          "title": "Limit",
+          "type": "integer"
+        },
+        "offset": {
+          "default": 0,
+          "description": "Zero-based page offset. Default 0.",
+          "title": "Offset",
+          "type": "integer"
+        }
+      },
+      "title": "list_workflowsArguments",
+      "type": "object"
+    },
+    "output_schema": {
+      "$defs": {
+        "WorkflowSummary": {
+          "properties": {
+            "workflow_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Workflow Id"
+            },
+            "workflow_url": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Workflow Url"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Title"
+            },
+            "status": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "ENABLED / DISABLED etc.",
+              "title": "Status"
+            },
+            "updated_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Updated At"
+            },
+            "run_count": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "How many times this workflow has run",
+              "title": "Run Count"
+            }
+          },
+          "title": "WorkflowSummary",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "workflows": {
+          "items": {
+            "$ref": "#/$defs/WorkflowSummary"
+          },
+          "title": "Workflows",
+          "type": "array"
+        },
+        "limit": {
+          "default": 50,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "offset": {
+          "default": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "count": {
+          "default": 0,
+          "title": "Count",
+          "type": "integer"
+        },
+        "has_more": {
+          "default": false,
+          "title": "Has More",
+          "type": "boolean"
+        },
+        "next_offset": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next Offset"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        }
+      },
+      "title": "WorkflowList",
+      "type": "object"
+    }
+  },
+  {
     "name": "get_workflow",
     "description": "\n        Get an existing workflow's structure: its steps, connections, and generic step state summaries.\n\n        Use this before every mutation of an existing workflow to obtain fresh\n        numeric step/link IDs and revision_id. It is also the compact read tool\n        when the user asks to inspect a workflow. After a successful bulk write,\n        call show_workflow directly instead of reading again.\n\n        Each connection carries an `outcome` when it leaves a branching step:\n        TRUE or FALSE on an if/else, the branch name on a conditional\n        branch, or the button/outcome text on an approval/task. That is how\n        you tell two paths apart. A split's paths are equivalent and carry\n        no outcome.\n\n        `step_states` is the generic exact-match source for deciding whether a\n        requested workflow action already exists. If a step's config_complete is\n        false or missing_fields is not empty, do not treat it as completed. This\n        is not permission to repair, connect, or delete that step unless the user\n        explicitly requested that exact change.\n        `email_steps` is an additional compact view for email/survey/notification\n        requests.\n\n        Steps are summaries only — use get_step_details for one non-email step's\n        full configuration.\n        ",
     "input_schema": {
       "properties": {
         "workflow_id": {
-          "description": "From show_workflows or a previous workflow result.",
+          "description": "From list_workflows or a previous workflow result.",
           "title": "Workflow Id",
           "type": "string"
         }
@@ -1600,7 +1764,7 @@
     "input_schema": {
       "properties": {
         "workflow_id": {
-          "description": "From show_workflows or a previous workflow result.",
+          "description": "From list_workflows or a previous workflow result.",
           "title": "Workflow Id",
           "type": "string"
         },
@@ -1684,7 +1848,7 @@
     "input_schema": {
       "properties": {
         "workflow_id": {
-          "description": "From show_workflows or a previous workflow result.",
+          "description": "From list_workflows or a previous workflow result.",
           "title": "Workflow Id",
           "type": "string"
         },
@@ -3148,7 +3312,7 @@
     "input_schema": {
       "properties": {
         "workflow_id": {
-          "description": "From show_workflows or a previous workflow result.",
+          "description": "From list_workflows or a previous workflow result.",
           "title": "Workflow Id",
           "type": "string"
         },
@@ -3355,7 +3519,7 @@
     "input_schema": {
       "properties": {
         "workflow_id": {
-          "description": "From show_workflows or a previous workflow result.",
+          "description": "From list_workflows or a previous workflow result.",
           "title": "Workflow Id",
           "type": "string"
         },

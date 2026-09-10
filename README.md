@@ -1489,9 +1489,10 @@ The frontend never receives or manages a separate Jotform credential.
 The normal read/write tools do not carry UI metadata. This is intentional:
 the assistant can perform all create/update calls and read-back checks
 without opening a half-finished preview after every mutation. Server and
-agent instructions require `show_workflow` exactly once after the final
-verified create/update state, and `show_workflows` when the user asks to
-browse workflows.
+agent instructions use the compact `list_workflows` tool to resolve the id of
+one named workflow, require `show_workflow` exactly once after the final
+verified create/update state, and reserve `show_workflows` for requests to
+browse multiple workflows.
 
 The repository contains both browser artifacts required by the embedded app:
 
@@ -1549,7 +1550,7 @@ doesn't work once the server isn't yours alone to run).
 
 ## Current status
 
-18 model-facing tools across 4 layers, including the two resource-bound
+17 model-facing tools across 4 layers, including the two resource-bound
 callbacks used by the embedded node-settings UI. The checked-in schema is
 generated from this live surface and covered by the test suite.
 

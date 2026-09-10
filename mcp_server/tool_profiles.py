@@ -15,6 +15,7 @@ FAST_TOOLS = frozenset({
     "build_workflow_bulk",
     "show_workflow",
     "show_workflows",
+    "list_workflows",
     "list_step_types",
     "get_step_schema",
     # Resource-bound MCP App callbacks. They are intentionally small and
